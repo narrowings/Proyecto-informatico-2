@@ -1,0 +1,11 @@
+// Modelo de datos: responsabilidad de T-01 parte de datos (Santiago Torralba).
+// Los modelos y migraciones se agregan aquí con `pnpm --filter @red/api prisma:migrate`.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}

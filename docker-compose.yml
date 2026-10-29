@@ -1,0 +1,26 @@
+# Servicios de apoyo para desarrollo local. La api y la web corren con `pnpm dev`.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: red
+      POSTGRES_PASSWORD: red
+      POSTGRES_DB: red_oportunidades
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U red -d red_oportunidades']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - '1025:1025' # SMTP
+      - '8025:8025' # interfaz web: http://localhost:8025
+
+volumes:
+  pgdata:

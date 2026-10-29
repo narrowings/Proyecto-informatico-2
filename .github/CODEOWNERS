@@ -1,0 +1,8 @@
+# Revisores por célula (Documento Tecnológico 5.2). Completar con los usuarios de GitHub del equipo.
+*                     @juanbaloco
+/infra/               @juanbaloco
+/.github/             @juanbaloco
+docker-compose*.yml   @juanbaloco
+# /apps/web/          @usuario-frontend
+# /apps/api/src/identity/  @usuario-seguridad
+# /apps/api/prisma/   @usuario-torralba
