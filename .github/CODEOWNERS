@@ -5,4 +5,4 @@
 docker-compose*.yml   @juanbaloco
 # /apps/web/          @usuario-frontend
 # /apps/api/src/identity/  @usuario-seguridad
-# /apps/api/prisma/   @usuario-torralba
+/apps/api/prisma/     @Santhor25 @juanbaloco
