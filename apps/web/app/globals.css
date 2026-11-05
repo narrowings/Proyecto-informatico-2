@@ -1,0 +1,43 @@
+@import 'tailwindcss';
+
+/*
+ * Tokens tomados del diseño de Claude (canvas "Red de Oportunidades Cali").
+ * Cuando exista @red/ui (T-02) se mueven allí.
+ * --color-danger no existe en el diseño original: se agregó para los errores
+ * de formulario (contraste 6:1 sobre blanco y sobre el fondo).
+ */
+@theme {
+  --font-sans: 'DM Sans Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Bricolage Grotesque Variable', ui-sans-serif, system-ui, sans-serif;
+
+  --color-canvas: #f2f5f3;
+  --color-ink: #10241f;
+  --color-muted: #4f625c;
+  --color-line: #dce5e1;
+  --color-brand: #0b6b53;
+  --color-brand-dark: #0a4f3d;
+  --color-brand-soft: #ddf1ea;
+  --color-amber: #f59e0b;
+  --color-warn-bg: #fff3dc;
+  --color-warn-ink: #5a3500;
+  --color-info-bg: #e7f1fb;
+  --color-info-ink: #123a5e;
+  --color-danger: #b42318;
+  --color-danger-soft: #feeceb;
+
+  --radius-field: 14px;
+  --radius-control: 16px;
+  --radius-card: 24px;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+  }
+}
