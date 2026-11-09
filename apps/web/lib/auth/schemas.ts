@@ -32,3 +32,22 @@ export const registerSchema = z.object({
 });
 
 export type RegisterFormValues = z.infer<typeof registerSchema>;
+
+export const INVALID_CREDENTIALS_MESSAGE = 'Correo o contraseña incorrectos';
+
+/** Inicio de sesión (HU-021): solo exige que los campos no estén vacíos. */
+export const loginSchema = z.object({
+  email: z.string().trim().min(1, 'Ingresa tu correo electrónico.'),
+  password: z.string().min(1, 'Ingresa tu contraseña.'),
+});
+
+export type LoginFormValues = z.infer<typeof loginSchema>;
+
+/** Aceptación de nuevas versiones de los documentos legales (HU-017 CA4). */
+export const acceptTermsSchema = registerSchema.pick({
+  termsAccepted: true,
+  privacyAccepted: true,
+  dataAuthorization: true,
+});
+
+export type AcceptTermsFormValues = z.infer<typeof acceptTermsSchema>;
