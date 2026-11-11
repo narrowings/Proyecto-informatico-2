@@ -49,6 +49,7 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
       WEB_URL: ${WEB_URL:?Falta WEB_URL en qa.env}
+      JWT_SECRET: ${JWT_SECRET:?Falta JWT_SECRET en qa.env (mínimo 32 caracteres)}
       RUN_SEED: ${RUN_SEED:-true}
     depends_on:
       postgres:
