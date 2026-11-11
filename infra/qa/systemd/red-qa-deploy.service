@@ -1,0 +1,12 @@
+[Unit]
+Description=Despliegue del ambiente QA de Red de Oportunidades
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+# Usuario del servidor que pertenece al grupo docker (cámbialo si es otro).
+User=willirv
+Environment=QA_HOME=/opt/red-qa
+ExecStart=/bin/bash /opt/red-qa/repo/infra/qa/deploy.sh
+TimeoutStartSec=30min

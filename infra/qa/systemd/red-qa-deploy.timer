@@ -1,0 +1,10 @@
+[Unit]
+Description=Revisa main cada 2 minutos y despliega QA si hay un commit nuevo
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=2min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
