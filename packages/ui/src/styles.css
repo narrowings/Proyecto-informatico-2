@@ -1,0 +1,51 @@
+/*
+ * Tokens compartidos de T-02, basados en las pantallas existentes de HU-001,
+ * HU-022 y HU-002. Los consumidores importan Tailwind antes de este archivo.
+ */
+@theme {
+  --font-sans: 'DM Sans Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Bricolage Grotesque Variable', ui-sans-serif, system-ui, sans-serif;
+
+  --color-canvas: #f2f5f3;
+  --color-ink: #10241f;
+  --color-muted: #4f625c;
+  --color-line: #dce5e1;
+  --color-control-border: #7b8b83;
+  --color-brand: #0b6b53;
+  --color-brand-dark: #0a4f3d;
+  --color-brand-soft: #ddf1ea;
+  --color-amber: #f59e0b;
+  --color-warn-bg: #fff3dc;
+  --color-warn-ink: #5a3500;
+  --color-info-bg: #e7f1fb;
+  --color-info-ink: #123a5e;
+  --color-danger: #b42318;
+  --color-danger-soft: #feeceb;
+
+  --radius-field: 14px;
+  --radius-control: 16px;
+  --radius-card: 24px;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
