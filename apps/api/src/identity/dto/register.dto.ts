@@ -1,10 +1,43 @@
-import { Transform } from 'class-transformer';
-import { Equals, IsEmail, IsNotEmpty, IsString, Matches, MaxLength } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  Equals,
+  IsEmail,
+  IsNotEmpty,
+  IsObject,
+  IsString,
+  Matches,
+  MaxLength,
+  ValidateNested,
+} from 'class-validator';
 
 // RF-01-02: mínimo 8 caracteres, con mayúscula, minúscula y número.
 export const PASSWORD_POLICY = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,128}$/;
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
+
+// HU-017 CA1 y CA2: versión de cada documento legal que el usuario vio y aceptó (cuatro casillas
+// separadas y no premarcadas, RF-01-06). Si no coincide con la vigente, el registro responde 409.
+// Mismo formato que envía el frontend (apps/web/lib/api/auth.ts).
+export class ConsentsDto {
+  @MaxLength(20, { message: 'Debes aceptar los términos y condiciones' })
+  @IsString({ message: 'Debes aceptar los términos y condiciones' })
+  @IsNotEmpty({ message: 'Debes aceptar los términos y condiciones' })
+  terms!: string;
+
+  @MaxLength(20, { message: 'Debes aceptar la política de privacidad' })
+  @IsString({ message: 'Debes aceptar la política de privacidad' })
+  @IsNotEmpty({ message: 'Debes aceptar la política de privacidad' })
+  privacy!: string;
+
+  @MaxLength(20, { message: 'Debes autorizar el tratamiento de tus datos personales' })
+  @IsString({ message: 'Debes autorizar el tratamiento de tus datos personales' })
+  @IsNotEmpty({ message: 'Debes autorizar el tratamiento de tus datos personales' })
+  dataProcessing!: string;
+
+  // HU-017 CA3
+  @Equals(true, { message: 'La plataforma es solo para mayores de 18 años' })
+  isAdult!: boolean;
+}
 
 // class-validator ejecuta primero el decorador más cercano a la propiedad y el pipe se detiene en el
 // primer error de cada campo, por eso IsNotEmpty va al final.
@@ -34,17 +67,8 @@ export class RegisterDto {
   @IsNotEmpty({ message: 'La contraseña es obligatoria' })
   password!: string;
 
-  // HU-017 CA1: cuatro casillas separadas y no premarcadas (RF-01-06).
-  @Equals(true, { message: 'Debes aceptar los términos y condiciones' })
-  acceptTerms!: boolean;
-
-  @Equals(true, { message: 'Debes aceptar la política de privacidad' })
-  acceptPrivacyPolicy!: boolean;
-
-  @Equals(true, { message: 'Debes autorizar el tratamiento de tus datos personales' })
-  authorizeDataTreatment!: boolean;
-
-  // HU-017 CA3
-  @Equals(true, { message: 'La plataforma es solo para mayores de 18 años' })
-  confirmAdult!: boolean;
+  @ValidateNested()
+  @Type(() => ConsentsDto)
+  @IsObject({ message: 'Debes aceptar los documentos legales para crear tu cuenta' })
+  consents!: ConsentsDto;
 }

@@ -14,10 +14,7 @@ const dto: RegisterDto = {
   email: 'ana@correo.com',
   phone: '+573001234567',
   password: 'Segura123',
-  acceptTerms: true,
-  acceptPrivacyPolicy: true,
-  authorizeDataTreatment: true,
-  confirmAdult: true,
+  consents: { terms: '0.1', privacy: '0.1', dataProcessing: '0.1', isAdult: true },
 };
 
 const legalDocuments = [
@@ -93,6 +90,19 @@ describe('IdentityService.register', () => {
       })),
     );
     expect(data.ageConfirmedAt).toBeInstanceOf(Date);
+  });
+
+  it('HU-017 CA2: responde 409 si el usuario aceptó una versión que ya no está vigente', async () => {
+    const outdated = { ...dto, consents: { ...dto.consents, privacy: '0.0' } };
+
+    const error = await ctx.service.register(outdated, '10.0.0.1').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ConflictException);
+    expect((error as ConflictException).getResponse()).toMatchObject({
+      code: 'VERSION_LEGAL_DESACTUALIZADA',
+      current: legalDocuments.map(({ type, version, url }) => ({ type, version, url })),
+    });
+    expect(ctx.prisma.user.create).not.toHaveBeenCalled();
   });
 
   it('HU-001 CA3: rechaza un correo ya registrado', async () => {

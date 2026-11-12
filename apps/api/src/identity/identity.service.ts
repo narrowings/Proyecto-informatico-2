@@ -7,16 +7,23 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AccountStatus, Prisma } from '@prisma/client';
+import { AccountStatus, LegalDocumentType, Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfirmationMailer } from './confirmation-mailer';
-import type { RegisterDto } from './dto/register.dto';
+import type { ConsentsDto, RegisterDto } from './dto/register.dto';
 import { createToken, hashToken } from './tokens';
 
 export const CONFIRMATION_TTL_MS = 24 * 60 * 60 * 1000; // RF-01-04
 export const EMAIL_TAKEN_MESSAGE = 'Este correo ya está registrado. Por favor, inicia sesión';
-const LEGAL_DOCUMENT_TYPES = 3; // términos, privacidad y tratamiento de datos
+
+// Campo del registro que trae la versión aceptada de cada documento legal.
+const CONSENT_FIELD: Record<LegalDocumentType, Exclude<keyof ConsentsDto, 'isAdult'>> = {
+  TERMS: 'terms',
+  PRIVACY_POLICY: 'privacy',
+  DATA_TREATMENT: 'dataProcessing',
+};
+const LEGAL_DOCUMENT_TYPES = Object.keys(CONSENT_FIELD).length;
 
 @Injectable()
 export class IdentityService {
@@ -37,6 +44,16 @@ export class IdentityService {
     if (existing) throw new ConflictException(EMAIL_TAKEN_MESSAGE);
 
     const legalDocuments = await this.currentLegalDocuments();
+    // HU-017 CA2: solo se deja constancia de la versión que el usuario vio. Si se publicó una nueva
+    // mientras llenaba el formulario, el frontend debe mostrarla de nuevo.
+    if (legalDocuments.some((doc) => dto.consents[CONSENT_FIELD[doc.type]] !== doc.version)) {
+      throw new ConflictException({
+        code: 'VERSION_LEGAL_DESACTUALIZADA',
+        message: 'Los documentos legales se actualizaron. Revísalos y acéptalos de nuevo',
+        current: legalDocuments.map(({ type, version, url }) => ({ type, version, url })),
+      });
+    }
+
     const passwordHash = await argon2.hash(dto.password, { type: argon2.argon2id });
     const { token, hash } = createToken();
     const now = new Date();
