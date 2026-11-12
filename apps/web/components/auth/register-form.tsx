@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
 import { useForm, useWatch, type FieldError } from 'react-hook-form';
+import { LegalLink } from '@/components/auth/legal-link';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -18,20 +19,6 @@ import {
 } from '@/lib/auth/schemas';
 import { LEGAL_VERSIONS } from '@/lib/legal';
 import { ROUTES } from '@/lib/routes';
-
-function LegalLink({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <Link
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="font-bold text-brand underline underline-offset-2"
-    >
-      {children}
-      <span className="sr-only"> (se abre en una pestaña nueva)</span>
-    </Link>
-  );
-}
 
 function emailError(error?: FieldError): ReactNode {
   if (!error) return undefined;
