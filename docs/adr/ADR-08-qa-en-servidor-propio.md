@@ -30,3 +30,13 @@ El Documento Tecnológico v1.1 planea QA en AWS (ECS Fargate, RDS, Terraform) de
 ## Revisar si…
 
 El servidor no está disponible en una demo o en las pruebas E2E del Sprint 2.
+
+## Actualización 2026-11-04 (William Reyes, QA + Release)
+
+El despliegue cambia de runner self-hosted a despliegue por "pull" (`infra/qa/deploy.sh` con un timer de systemd):
+
+- El repositorio es público. Un runner self-hosted en un repo público puede ejecutar código de pull requests de forks en el servidor; GitHub recomienda no usarlos así.
+- El servidor revisa `main` cada 2 minutos y solo despliega commits con el CI en verde, que ahora incluye construir las imágenes de Docker.
+- No hay que registrar runner ni guardar secretos en GitHub; el servidor sigue sin puertos entrantes.
+
+Costo: el despliegue tarda hasta 2 minutos más después de que el CI termina.

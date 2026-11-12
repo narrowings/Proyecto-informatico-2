@@ -8,10 +8,7 @@ const valid = {
   email: ' Ana@Correo.COM ',
   phone: '+57 300 123 4567',
   password: 'Segura123',
-  acceptTerms: true,
-  acceptPrivacyPolicy: true,
-  authorizeDataTreatment: true,
-  confirmAdult: true,
+  consents: { terms: '0.1', privacy: '0.1', dataProcessing: '0.1', isAdult: true },
 };
 
 const transform = (body: object) =>
@@ -65,12 +62,18 @@ describe('RegisterDto', () => {
   it('HU-017 CA1 y CA3: exige las cuatro casillas legales', async () => {
     const errors = await fieldErrors({
       ...valid,
-      authorizeDataTreatment: false,
-      confirmAdult: undefined,
+      consents: { terms: '0.1', privacy: '0.1', dataProcessing: '', isAdult: false },
     });
     expect(errors).toEqual({
-      authorizeDataTreatment: ['Debes autorizar el tratamiento de tus datos personales'],
-      confirmAdult: ['La plataforma es solo para mayores de 18 años'],
+      'consents.dataProcessing': ['Debes autorizar el tratamiento de tus datos personales'],
+      'consents.isAdult': ['La plataforma es solo para mayores de 18 años'],
+    });
+  });
+
+  it('HU-017 CA1: rechaza el registro sin consentimientos', async () => {
+    const errors = await fieldErrors({ ...valid, consents: undefined });
+    expect(errors).toEqual({
+      consents: ['Debes aceptar los documentos legales para crear tu cuenta'],
     });
   });
 });

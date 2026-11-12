@@ -1,0 +1,90 @@
+# Ambiente QA (ADR-08). Lo levanta infra/qa/deploy.sh en el servidor de QA:
+#   docker compose -p red-qa -f infra/qa/docker-compose.qa.yml --env-file /opt/red-qa/qa.env up -d --build
+# Los puertos solo escuchan en 127.0.0.1: nada queda abierto hacia la red; se publica con Cloudflare Tunnel.
+name: red-qa
+
+x-limits: &limits
+  restart: unless-stopped
+  labels:
+    project: red-qa
+
+services:
+  postgres:
+    <<: *limits
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: red
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en qa.env}
+      POSTGRES_DB: red_oportunidades
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U red -d red_oportunidades']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
+
+  mailpit:
+    <<: *limits
+    image: axllent/mailpit:latest
+    environment:
+      # Usuario y clave para ver los correos de QA (formato usuario:clave).
+      MP_UI_AUTH: ${MAILPIT_UI_AUTH:?Falta MAILPIT_UI_AUTH en qa.env}
+      MP_MAX_MESSAGES: 2000
+    ports:
+      - '127.0.0.1:${MAILPIT_PORT:-8125}:8025'
+    mem_limit: 128m
+
+  api:
+    <<: *limits
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    image: red-qa/api:latest
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://red:${POSTGRES_PASSWORD}@postgres:5432/red_oportunidades?schema=public
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      WEB_URL: ${WEB_URL:?Falta WEB_URL en qa.env}
+      JWT_SECRET: ${JWT_SECRET:?Falta JWT_SECRET en qa.env (mínimo 32 caracteres)}
+      RUN_SEED: ${RUN_SEED:-true}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    ports:
+      - '127.0.0.1:${API_PORT:-3101}:3001'
+    networks:
+      default:
+        aliases: [red-qa-api]
+    mem_limit: 512m
+
+  web:
+    <<: *limits
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    image: red-qa/web:latest
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    depends_on:
+      - api
+    ports:
+      - '127.0.0.1:${WEB_PORT:-3100}:3000'
+    networks:
+      default:
+        aliases: [red-qa-web]
+    mem_limit: 512m
+
+networks:
+  default:
+    # Nombre fijo para poder conectar el contenedor de cloudflared (ver README).
+    name: red-qa
+
+volumes:
+  pgdata:
