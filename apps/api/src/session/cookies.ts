@@ -3,6 +3,10 @@ import { REFRESH_TTL_MS } from './session.constants';
 
 export const REFRESH_COOKIE = 'refresh_token';
 
+// Secure en todo ambiente salvo desarrollo local: QA y producción van por HTTPS (revisión PR #5, 3.3).
+// Si NODE_ENV no está definido también es Secure, para que un olvido no la mande en claro.
+export const isSecureCookie = (nodeEnv: string | undefined) => nodeEnv !== 'development';
+
 // httpOnly: el JavaScript del navegador no puede leerla. Path limitado a las rutas de autenticación.
 const base = (secure: boolean): CookieOptions => ({
   httpOnly: true,

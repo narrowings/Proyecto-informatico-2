@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readCookie } from './cookies';
+import { isSecureCookie, readCookie } from './cookies';
 
 describe('readCookie', () => {
   it('lee la cookie pedida entre varias', () => {
@@ -14,5 +14,16 @@ describe('readCookie', () => {
     expect(readCookie('a=1', 'refresh_token')).toBeUndefined();
     expect(readCookie(undefined, 'refresh_token')).toBeUndefined();
     expect(readCookie('refresh_token=%E0%A4%A', 'refresh_token')).toBeUndefined();
+  });
+});
+describe('isSecureCookie', () => {
+  it('solo en desarrollo local la cookie viaja sin Secure', () => {
+    expect(isSecureCookie('development')).toBe(false);
+  });
+
+  it('en QA, producción, pruebas o sin NODE_ENV lleva Secure', () => {
+    for (const env of ['production', 'qa', 'test', undefined]) {
+      expect(isSecureCookie(env)).toBe(true);
+    }
   });
 });
