@@ -5,7 +5,14 @@ import type { SessionApi } from './session';
 export const mockSessionApi: SessionApi = {
   async getCurrentUser() {
     await wait(200);
-    const { user, workerProfile } = readMockState();
-    return user ? { ...user, hasWorkerProfile: workerProfile !== null } : null;
+    const { user, workerProfile, publisherProfile } = readMockState();
+    return user
+      ? {
+          ...user,
+          hasWorkerProfile: workerProfile !== null,
+          hasPublisherProfile: publisherProfile !== null,
+          publisherProfileId: publisherProfile?.id,
+        }
+      : null;
   },
 };

@@ -9,10 +9,18 @@ type PhotoInputProps = {
   name: string;
   error?: string;
   inputRef?: Ref<HTMLInputElement>;
+  label?: string;
 };
 
 /** Foto de perfil con vista previa. La validación de tipo y peso vive en el esquema. */
-export function PhotoInput({ value, onChange, name, error, inputRef }: PhotoInputProps) {
+export function PhotoInput({
+  value,
+  onChange,
+  name,
+  error,
+  inputRef,
+  label = 'foto',
+}: PhotoInputProps) {
   const id = useId();
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
@@ -55,7 +63,7 @@ export function PhotoInput({ value, onChange, name, error, inputRef }: PhotoInpu
           htmlFor={id}
           className="inline-flex h-11 w-fit cursor-pointer items-center rounded-field border border-line bg-white px-4 text-[15px] font-bold has-focus-visible:outline-3 has-focus-visible:outline-offset-2 has-focus-visible:outline-brand hover:bg-brand-soft"
         >
-          {value ? 'Cambiar foto' : 'Subir foto'}
+          {value ? `Cambiar ${label}` : `Subir ${label}`}
           <input
             ref={inputRef}
             id={id}

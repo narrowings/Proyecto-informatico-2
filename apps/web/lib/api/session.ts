@@ -9,6 +9,7 @@ export type CurrentUser = {
   /** Una misma cuenta puede tener perfil de trabajador y de publicador (HU-022 CA4). */
   hasWorkerProfile: boolean;
   hasPublisherProfile: boolean;
+  publisherProfileId?: string;
 };
 
 export type SessionApi = {

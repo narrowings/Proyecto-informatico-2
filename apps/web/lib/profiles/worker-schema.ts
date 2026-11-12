@@ -25,7 +25,7 @@ export function addSkills(skills: string[], raws: string[]): string[] {
   return raws.reduce((acc, raw) => (acc.length >= MAX_SKILLS ? acc : addSkill(acc, raw)), skills);
 }
 
-const photoSchema = z
+export const photoSchema = z
   .custom<File | null>((value) => value === null || value instanceof File)
   .refine((file): file is File => file instanceof File, 'Agrega una foto de perfil.')
   .refine(

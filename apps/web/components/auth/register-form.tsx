@@ -59,6 +59,7 @@ export function RegisterForm() {
     handleSubmit,
     control,
     setError,
+    trigger,
     formState: { errors, isSubmitting },
   } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
@@ -211,6 +212,10 @@ export function RegisterForm() {
         <Button
           type="submit"
           aria-disabled={!legalComplete || isSubmitting}
+          onClickCapture={() => {
+            // T-02 bloquea la activación; conservar la explicación de campos faltantes.
+            if (!legalComplete && !isSubmitting) void trigger(undefined, { shouldFocus: true });
+          }}
           aria-describedby={legalComplete ? undefined : 'registro-ayuda-legal'}
         >
           {isSubmitting ? 'Creando cuenta…' : 'Crear cuenta'}
