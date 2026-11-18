@@ -38,7 +38,6 @@ export function PublisherPublicProfile({ id }: { id: string }) {
 
   return (
     <article className="flex flex-col gap-5">
-      {/* Imagen de la API; también admite las imágenes locales de la demo. */}
       <img
         src={profile.photoUrl}
         alt={
@@ -55,7 +54,12 @@ export function PublisherPublicProfile({ id }: { id: string }) {
         <p className="font-bold text-brand-dark">Identidad verificada</p>
       ) : null}
       <p className="whitespace-pre-wrap break-words text-[15px]">{profile.description}</p>
-      <p className="text-[13px] text-muted">Nuevo en la plataforma</p>
+      {profile.sector ? <p className="text-[15px]">Sector: {profile.sector}</p> : null}
+      <p className="text-[13px] text-muted">
+        {profile.reputation.ratingsCount > 0
+          ? `Calificación: ${profile.reputation.average} de 5 (${profile.reputation.ratingsCount})`
+          : 'Nuevo en la plataforma'}
+      </p>
     </article>
   );
 }

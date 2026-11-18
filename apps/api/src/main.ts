@@ -8,6 +8,11 @@ import { validationPipe } from './common/validation';
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   applyTrustProxy(app);
+  app.enableCors({
+    origin: new URL(process.env.WEB_URL ?? 'http://localhost:3000').origin,
+    credentials: true,
+    exposedHeaders: ['Retry-After-ip'],
+  });
   app.setGlobalPrefix('v1');
   app.useGlobalPipes(validationPipe);
   app.enableShutdownHooks();

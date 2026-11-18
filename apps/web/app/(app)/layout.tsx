@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { AppNav } from '@/components/app/app-nav';
+import { AppSessionGuard } from '@/components/auth/session-guard';
 import { Logo } from '@/components/logo';
 import { ROUTES } from '@/lib/routes';
 
@@ -8,6 +9,7 @@ import { ROUTES } from '@/lib/routes';
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col">
+      <AppSessionGuard />
       <header className="mx-auto w-full max-w-md px-5 pt-6">
         <Link
           href={ROUTES.home}

@@ -18,7 +18,7 @@ const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? val
 // HU-017 CA1 y CA2: versión de cada documento legal que el usuario vio y aceptó (cuatro casillas
 // separadas y no premarcadas, RF-01-06). Si no coincide con la vigente, el registro responde 409.
 // Mismo formato que envía el frontend (apps/web/lib/api/auth.ts).
-export class ConsentsDto {
+export class LegalVersionsDto {
   @MaxLength(20, { message: 'Debes aceptar los términos y condiciones' })
   @IsString({ message: 'Debes aceptar los términos y condiciones' })
   @IsNotEmpty({ message: 'Debes aceptar los términos y condiciones' })
@@ -33,7 +33,9 @@ export class ConsentsDto {
   @IsString({ message: 'Debes autorizar el tratamiento de tus datos personales' })
   @IsNotEmpty({ message: 'Debes autorizar el tratamiento de tus datos personales' })
   dataProcessing!: string;
+}
 
+export class ConsentsDto extends LegalVersionsDto {
   // HU-017 CA3
   @Equals(true, { message: 'La plataforma es solo para mayores de 18 años' })
   isAdult!: boolean;

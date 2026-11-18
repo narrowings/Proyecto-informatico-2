@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { LogoutButton } from '@/components/auth/logout-button';
 import { ComingSoon } from '@/components/app/coming-soon';
 import { RequireProfile } from '@/components/app/require-profile';
 
@@ -13,6 +14,7 @@ export default function MiActividadPage() {
       <ComingSoon title="Mi actividad">
         Aquí verás tus postulaciones, publicaciones, acuerdos y reputación (HU-013).
       </ComingSoon>
+      <LogoutButton />
     </RequireProfile>
   );
 }

@@ -6,7 +6,7 @@ export const MAX_PUBLISHER_NAME_LENGTH = 160;
 export const MAX_DESCRIPTION_LENGTH = 1000;
 
 export function validNit(nit: string, digit: string): boolean {
-  if (!/^\d{1,10}$/.test(nit) || !/^[0-9]$/.test(digit) || /^0+$/.test(nit)) return false;
+  if (!/^\d{6,10}$/.test(nit) || !/^[0-9]$/.test(digit) || /^0+$/.test(nit)) return false;
   const weights = [3, 7, 13, 17, 19, 23, 29, 37, 41, 43];
   const sum = [...nit]
     .reverse()
@@ -34,7 +34,7 @@ export const publisherProfileSchema = z.discriminatedUnion('kind', [
       nit: z
         .string()
         .trim()
-        .regex(/^\d{1,10}$/, 'Ingresa el NIT sin puntos ni dígito de verificación.'),
+        .regex(/^\d{6,10}$/, 'Ingresa entre 6 y 10 dígitos, sin puntos ni dígito de verificación.'),
       nitCheckDigit: z.string().trim().regex(/^\d$/, 'Ingresa el dígito de verificación.'),
       contactName: z
         .string()

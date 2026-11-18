@@ -25,13 +25,18 @@ const start = async (nodeEnv = 'production') => {
       refreshToken: 'opaco',
       user: { id: 'u1', name: 'Ana', email: 'ana@correo.com' },
     }),
-    refresh: vi.fn().mockResolvedValue({ accessToken: 'jwt2', expiresIn: 900, refreshToken: 'opaco2' }),
+    refresh: vi
+      .fn()
+      .mockResolvedValue({ accessToken: 'jwt2', expiresIn: 900, refreshToken: 'opaco2' }),
     logout: vi.fn().mockResolvedValue(undefined),
     me: vi.fn(),
   };
 
   @Module({
-    imports: [ConfigModule.forRoot({ ignoreEnvFile: true }), ThrottlerModule.forRoot(rateLimitOptions)],
+    imports: [
+      ConfigModule.forRoot({ ignoreEnvFile: true }),
+      ThrottlerModule.forRoot(rateLimitOptions),
+    ],
     controllers: [SessionController],
     providers: [{ provide: SessionService, useValue: session }],
   })
@@ -111,7 +116,9 @@ describe('SessionController: límite de intentos (RNF-SEG-08, revisión PR #5 3.
   it('refresh: permite 10 renovaciones por minuto y la undécima responde 429', async () => {
     const { base } = await start();
     for (let i = 0; i < 10; i++) {
-      expect((await post(`${base}/refresh`, CLIENT, undefined, 'refresh_token=x')).status).toBe(200);
+      expect((await post(`${base}/refresh`, CLIENT, undefined, 'refresh_token=x')).status).toBe(
+        200,
+      );
     }
     expect((await post(`${base}/refresh`, CLIENT, undefined, 'refresh_token=x')).status).toBe(429);
   });

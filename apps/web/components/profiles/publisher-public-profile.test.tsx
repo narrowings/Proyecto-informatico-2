@@ -17,6 +17,7 @@ beforeEach(() => {
     photoUrl: '/logo.png',
     description: 'Servicios locales',
     isVerified: false,
+    reputation: { average: null, ratingsCount: 0, completedJobs: 0 },
     contactName: 'Contacto privado',
     nit: '800197268',
     email: 'privado@example.com',

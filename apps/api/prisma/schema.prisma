@@ -192,5 +192,17 @@ model PublisherProfile {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  photo PublisherPhoto?
+
   @@map("publisher_profiles")
+}
+
+// Se consulta por separado para que las vistas de perfil no carguen el archivo.
+model PublisherPhoto {
+  profileId String           @id @map("profile_id") @db.Uuid
+  mediaType String           @map("media_type") @db.VarChar(32)
+  content   Bytes
+  profile   PublisherProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("publisher_photos")
 }

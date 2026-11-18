@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { Alert } from '@/components/ui/alert';
+import { Field } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { authApi } from '@/lib/api';
 import { ROUTES } from '@/lib/routes';
@@ -11,13 +12,13 @@ type State = 'checking' | 'expired' | 'error';
 
 /**
  * Confirmación de correo (HU-001 CA2). Con el enlace válido la cuenta pasa a
- * "Activa" y se lleva al usuario a la selección de intención (pantalla Inicio,
- * HU-022). Con el enlace vencido se ofrece solicitar uno nuevo.
+ * "Activa" y puede iniciar sesión. Con el enlace vencido se ofrece solicitar uno nuevo.
  */
 export function ConfirmEmail() {
   const router = useRouter();
   const token = useSearchParams().get('token') ?? '';
   const [state, setState] = useState<State>('checking');
+  const [email, setEmail] = useState('');
   const [resending, setResending] = useState(false);
   const [resent, setResent] = useState(false);
   const [resendFailed, setResendFailed] = useState(false);
@@ -31,7 +32,7 @@ export function ConfirmEmail() {
       .confirmEmail(token)
       .then((result) => {
         if (result.status === 'active') {
-          router.replace(ROUTES.home);
+          router.replace(ROUTES.login);
         } else {
           setState('expired');
         }
@@ -44,7 +45,7 @@ export function ConfirmEmail() {
     setResending(true);
     setResendFailed(false);
     try {
-      await authApi.requestNewConfirmationLink(token);
+      await authApi.resendConfirmationLink(email.trim());
       setResent(true);
     } catch {
       setResendFailed(true);
@@ -87,9 +88,25 @@ export function ConfirmEmail() {
       ) : null}
 
       {state === 'expired' ? (
-        <Button type="button" aria-disabled={resending} onClick={requestNewLink}>
-          {resending ? 'Enviando…' : 'Solicitar nuevo enlace'}
-        </Button>
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void requestNewLink();
+          }}
+        >
+          <Field
+            label="Correo electrónico"
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+          <Button type="submit" aria-disabled={resending}>
+            {resending ? 'Enviando…' : 'Solicitar nuevo enlace'}
+          </Button>
+        </form>
       ) : null}
     </div>
   );

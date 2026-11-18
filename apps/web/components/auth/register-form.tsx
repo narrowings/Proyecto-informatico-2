@@ -17,7 +17,8 @@ import {
   registerSchema,
   type RegisterFormValues,
 } from '@/lib/auth/schemas';
-import { LEGAL_VERSIONS } from '@/lib/legal';
+import { useLegalDocuments, versionsOf } from '@/lib/legal';
+import { ApiError } from '@/lib/api/http';
 import { ROUTES } from '@/lib/routes';
 
 function emailError(error?: FieldError): ReactNode {
@@ -39,12 +40,14 @@ function emailError(error?: FieldError): ReactNode {
 /** Registro de usuario (HU-001) con casillas legales y confirmación de mayoría de edad (HU-017). */
 export function RegisterForm() {
   const router = useRouter();
-  const [unexpectedError, setUnexpectedError] = useState(false);
+  const { documents, failed, reload } = useLegalDocuments();
+  const [problem, setProblem] = useState('');
 
   const {
     register,
     handleSubmit,
     control,
+    resetField,
     setError,
     trigger,
     formState: { errors, isSubmitting },
@@ -69,14 +72,15 @@ export function RegisterForm() {
   const legalComplete = legalChecks.every(Boolean);
 
   const submit = handleSubmit(async (values) => {
-    setUnexpectedError(false);
+    if (!documents) return;
+    setProblem('');
     try {
       const result = await authApi.register({
         name: values.name,
         email: values.email,
         phone: values.phone,
         password: values.password,
-        consents: { ...LEGAL_VERSIONS, isAdult: true },
+        consents: { ...versionsOf(documents), isAdult: true },
       });
       if (result.ok) {
         router.push(ROUTES.registerPending);
@@ -87,8 +91,26 @@ export function RegisterForm() {
         { type: 'email_taken', message: EMAIL_TAKEN_MESSAGE },
         { shouldFocus: true },
       );
-    } catch {
-      setUnexpectedError(true);
+    } catch (error) {
+      if (error instanceof ApiError && error.problem.code === 'VERSION_LEGAL_DESACTUALIZADA') {
+        resetField('termsAccepted');
+        resetField('privacyAccepted');
+        resetField('dataAuthorization');
+        reload();
+        setProblem('Los documentos legales cambiaron. Revísalos y acéptalos de nuevo.');
+        return;
+      }
+      if (error instanceof ApiError && error.problem.errors) {
+        for (const field of ['name', 'email', 'phone', 'password'] as const) {
+          const message = error.problem.errors[field]?.[0];
+          if (message) setError(field, { message });
+        }
+      }
+      setProblem(
+        error instanceof ApiError && error.status === 429
+          ? 'Demasiados intentos. Inténtalo más tarde.'
+          : 'No pudimos crear tu cuenta. Inténtalo de nuevo.',
+      );
     }
   });
 
@@ -150,12 +172,23 @@ export function RegisterForm() {
         {...register('password')}
       />
 
-      <fieldset className="flex flex-col gap-2.5">
+      {failed ? (
+        <Alert role="alert" tone="danger">
+          No pudimos cargar los documentos legales.{' '}
+          <Button variant="secondary" onClick={reload}>
+            Reintentar
+          </Button>
+        </Alert>
+      ) : null}
+      <fieldset disabled={!documents} className="flex flex-col gap-2.5">
         <legend className="mb-2.5 text-[13px] font-bold">Requisitos legales</legend>
         <Checkbox
           label={
             <>
-              Acepto los <LegalLink href={ROUTES.terms}>términos y condiciones</LegalLink>
+              Acepto los{' '}
+              <LegalLink href={documents?.terms.url ?? ROUTES.terms}>
+                términos y condiciones
+              </LegalLink>
             </>
           }
           error={errors.termsAccepted?.message}
@@ -164,7 +197,10 @@ export function RegisterForm() {
         <Checkbox
           label={
             <>
-              Acepto la <LegalLink href={ROUTES.privacy}>política de privacidad</LegalLink>
+              Acepto la{' '}
+              <LegalLink href={documents?.privacy.url ?? ROUTES.privacy}>
+                política de privacidad
+              </LegalLink>
             </>
           }
           error={errors.privacyAccepted?.message}
@@ -174,7 +210,7 @@ export function RegisterForm() {
           label={
             <>
               Autorizo el{' '}
-              <LegalLink href={ROUTES.dataProcessing}>
+              <LegalLink href={documents?.dataProcessing.url ?? ROUTES.dataProcessing}>
                 tratamiento de mis datos personales
               </LegalLink>
             </>
@@ -189,16 +225,16 @@ export function RegisterForm() {
         />
       </fieldset>
 
-      {unexpectedError ? (
+      {problem ? (
         <Alert tone="danger" role="alert">
-          No pudimos crear tu cuenta. Inténtalo de nuevo.
+          {problem}
         </Alert>
       ) : null}
 
       <div className="flex flex-col gap-2">
         <Button
           type="submit"
-          aria-disabled={!legalComplete || isSubmitting}
+          aria-disabled={!documents || !legalComplete || isSubmitting}
           onClickCapture={() => {
             // T-02 bloquea la activación; conservar la explicación de campos faltantes.
             if (!legalComplete && !isSubmitting) void trigger(undefined, { shouldFocus: true });

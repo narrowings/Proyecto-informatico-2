@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { authApi } from '@/lib/api';
 import { acceptTermsSchema, type AcceptTermsFormValues } from '@/lib/auth/schemas';
-import { LEGAL_VERSIONS } from '@/lib/legal';
+import { useLegalDocuments, versionsOf } from '@/lib/legal';
+import { ApiError } from '@/lib/api/http';
 import { ROUTES } from '@/lib/routes';
 
 /**
@@ -19,12 +20,15 @@ import { ROUTES } from '@/lib/routes';
  */
 export function AcceptTermsForm() {
   const router = useRouter();
-  const [unexpectedError, setUnexpectedError] = useState(false);
+  const { documents, failed, reload } = useLegalDocuments();
+  const [problem, setProblem] = useState('');
 
   const {
     register,
     handleSubmit,
     control,
+    resetField,
+    trigger,
     formState: { errors, isSubmitting },
   } = useForm<AcceptTermsFormValues>({
     resolver: zodResolver(acceptTermsSchema),
@@ -38,12 +42,25 @@ export function AcceptTermsForm() {
   const complete = checks.every(Boolean);
 
   const submit = handleSubmit(async () => {
-    setUnexpectedError(false);
+    if (!documents) return;
+    setProblem('');
     try {
-      await authApi.acceptTerms(LEGAL_VERSIONS);
+      await authApi.acceptTerms(versionsOf(documents));
       router.replace(ROUTES.home);
-    } catch {
-      setUnexpectedError(true);
+    } catch (error) {
+      if (error instanceof ApiError && error.problem.code === 'VERSION_LEGAL_DESACTUALIZADA') {
+        resetField('termsAccepted');
+        resetField('privacyAccepted');
+        resetField('dataAuthorization');
+        reload();
+        setProblem('Los documentos legales cambiaron. Revísalos y acéptalos de nuevo.');
+        return;
+      }
+      setProblem(
+        error instanceof ApiError && error.status === 429
+          ? 'Demasiados intentos. Inténtalo más tarde.'
+          : 'No pudimos registrar tu aceptación. Inténtalo de nuevo.',
+      );
     }
   });
 
@@ -69,12 +86,23 @@ export function AcceptTermsForm() {
         </p>
       </div>
 
-      <fieldset className="flex flex-col gap-2.5">
+      {failed ? (
+        <Alert role="alert" tone="danger">
+          No pudimos cargar los documentos legales.{' '}
+          <Button variant="secondary" onClick={reload}>
+            Reintentar
+          </Button>
+        </Alert>
+      ) : null}
+      <fieldset disabled={!documents} className="flex flex-col gap-2.5">
         <legend className="mb-2.5 text-[13px] font-bold">Requisitos legales</legend>
         <Checkbox
           label={
             <>
-              Acepto los <LegalLink href={ROUTES.terms}>términos y condiciones</LegalLink>
+              Acepto los{' '}
+              <LegalLink href={documents?.terms.url ?? ROUTES.terms}>
+                términos y condiciones
+              </LegalLink>
             </>
           }
           error={errors.termsAccepted?.message}
@@ -83,7 +111,10 @@ export function AcceptTermsForm() {
         <Checkbox
           label={
             <>
-              Acepto la <LegalLink href={ROUTES.privacy}>política de privacidad</LegalLink>
+              Acepto la{' '}
+              <LegalLink href={documents?.privacy.url ?? ROUTES.privacy}>
+                política de privacidad
+              </LegalLink>
             </>
           }
           error={errors.privacyAccepted?.message}
@@ -93,7 +124,7 @@ export function AcceptTermsForm() {
           label={
             <>
               Autorizo el{' '}
-              <LegalLink href={ROUTES.dataProcessing}>
+              <LegalLink href={documents?.dataProcessing.url ?? ROUTES.dataProcessing}>
                 tratamiento de mis datos personales
               </LegalLink>
             </>
@@ -103,16 +134,19 @@ export function AcceptTermsForm() {
         />
       </fieldset>
 
-      {unexpectedError ? (
+      {problem ? (
         <Alert tone="danger" role="alert">
-          No pudimos registrar tu aceptación. Inténtalo de nuevo.
+          {problem}
         </Alert>
       ) : null}
 
       <div className="flex flex-col gap-2">
         <Button
           type="submit"
-          aria-disabled={!complete || isSubmitting}
+          aria-disabled={!documents || !complete || isSubmitting}
+          onClickCapture={() => {
+            if (!complete && !isSubmitting) void trigger(undefined, { shouldFocus: true });
+          }}
           aria-describedby={complete ? undefined : 'terminos-ayuda'}
         >
           {isSubmitting ? 'Guardando…' : 'Aceptar y continuar'}
