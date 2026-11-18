@@ -12,6 +12,8 @@ COPY . .
 # public/ es opcional en Next.js; se crea vacío para que el COPY de la imagen final no falle.
 RUN mkdir -p apps/web/public
 RUN pnpm install --frozen-lockfile
+ARG NEXT_PUBLIC_API_URL=http://localhost:3001
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 RUN pnpm exec turbo run build --filter=@red/web
 
 FROM node:24-bookworm-slim AS runtime

@@ -2,6 +2,8 @@ import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/c
 import { AccountStatus } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { randomUUID } from 'node:crypto';
+import { ProfilesService } from '../profiles/profiles.service';
+import { IdentityService } from '../identity/identity.service';
 import { createToken, hashToken } from '../identity/tokens';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessTokenService } from './access-token.service';
@@ -26,6 +28,8 @@ export class SessionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly accessTokens: AccessTokenService,
+    private readonly identity: IdentityService,
+    private readonly profiles: ProfilesService,
   ) {}
 
   // HU-021 CA1, CA2 y CA4.
@@ -46,6 +50,7 @@ export class SessionService {
     }
     if (user.status !== AccountStatus.ACTIVE) throw new ForbiddenException(ACCOUNT_SUSPENDED);
 
+    const requiresTermsAcceptance = await this.identity.requiresTermsAcceptance(user.id);
     const { token: refreshToken, hash: tokenHash } = createToken();
     await this.prisma.refreshToken.create({
       data: {
@@ -62,6 +67,7 @@ export class SessionService {
       accessToken,
       expiresIn,
       refreshToken,
+      requiresTermsAcceptance,
       user: { id: user.id, name: user.name, email: user.email },
     };
   }
@@ -131,7 +137,12 @@ export class SessionService {
     if (!user || user.status !== AccountStatus.ACTIVE) {
       throw new UnauthorizedException(SESSION_EXPIRED);
     }
-    return { id: user.id, name: user.name, email: user.email };
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      ...(await this.profiles.getProfileSummary(user.id)),
+    };
   }
 
   private async revokeFamily(familyId: string) {

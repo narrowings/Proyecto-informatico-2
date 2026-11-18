@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { validationPipe } from '../common/validation';
@@ -108,9 +103,10 @@ describe('ProfilesService.createPublisherProfile', () => {
       }),
     );
 
-    await expect(ctx.service.createPublisherProfile('u1', company)).rejects.toThrow(
-      new ConflictException('Ya existe una empresa registrada con este NIT'),
-    );
+    await expect(ctx.service.createPublisherProfile('u1', company)).rejects.toMatchObject({
+      status: 409,
+      response: { code: 'NIT_TAKEN', message: 'Ya existe una empresa registrada con este NIT' },
+    });
   });
 });
 

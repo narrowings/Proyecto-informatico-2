@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { SessionGuard } from '@/components/auth/session-guard';
 import { Logo } from '@/components/logo';
 import { Alert } from '@/components/ui/alert';
 import { ROUTES } from '@/lib/routes';
@@ -28,6 +29,7 @@ export function IntentScreen() {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 px-5 pt-8 pb-6">
+      {session.status === 'ready' && session.user ? <SessionGuard /> : null}
       <header>
         <Logo />
       </header>

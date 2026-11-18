@@ -1,10 +1,13 @@
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
+import { ProfilesModule } from '../profiles/profiles.module';
+import { IdentityModule } from '../identity/identity.module';
 import { AccessTokenMiddleware } from './access-token.middleware';
 import { AccessTokenService } from './access-token.service';
 import { SessionController } from './session.controller';
 import { SessionService } from './session.service';
 
 @Module({
+  imports: [IdentityModule, ProfilesModule],
   controllers: [SessionController],
   providers: [SessionService, AccessTokenService, AccessTokenMiddleware],
   exports: [AccessTokenService],

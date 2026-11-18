@@ -5,13 +5,11 @@ import { PublisherProfileForm } from './publisher-profile-form';
 
 const replace = vi.fn();
 const getCurrentUser = vi.fn();
-const uploadProfilePhoto = vi.fn();
 const createPublisherProfile = vi.fn();
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace }) }));
 vi.mock('@/lib/api', () => ({
   sessionApi: { getCurrentUser: () => getCurrentUser() },
   profilesApi: {
-    uploadProfilePhoto: (...args: unknown[]) => uploadProfilePhoto(...args),
     createPublisherProfile: (...args: unknown[]) => createPublisherProfile(...args),
   },
 }));
@@ -23,7 +21,6 @@ beforeEach(() => {
     hasWorkerProfile: true,
     hasPublisherProfile: false,
   });
-  uploadProfilePhoto.mockResolvedValue({ url: '/foto.png' });
   createPublisherProfile.mockResolvedValue({ ok: true, profile: { id: 'p1' } });
 });
 
@@ -52,7 +49,7 @@ describe('HU-008 formulario', () => {
       kind: 'PERSON',
       displayName: 'Ana Pérez',
       description: 'Servicios en Cali',
-      photoUrl: '/foto.png',
+      photo: expect.any(File),
     });
     expect(screen.getByRole('link', { name: 'Continuar para publicar' })).toHaveAttribute(
       'href',

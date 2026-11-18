@@ -1,6 +1,8 @@
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
+import type { ProfilesService } from '../profiles/profiles.service';
+import type { IdentityService } from '../identity/identity.service';
 import { hashToken } from '../identity/tokens';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { AccessTokenService } from './access-token.service';
@@ -38,6 +40,12 @@ const setup = () => {
   const service = new SessionService(
     prisma as unknown as PrismaService,
     accessTokens as unknown as AccessTokenService,
+    { requiresTermsAcceptance: vi.fn().mockResolvedValue(false) } as unknown as IdentityService,
+    {
+      getProfileSummary: vi
+        .fn()
+        .mockResolvedValue({ hasWorkerProfile: false, hasPublisherProfile: false }),
+    } as unknown as ProfilesService,
   );
   return { prisma, accessTokens, service };
 };
@@ -61,6 +69,7 @@ describe('SessionService.login', () => {
       accessToken: 'jwt',
       expiresIn: 900,
       refreshToken: expect.any(String),
+      requiresTermsAcceptance: false,
       user: { id: 'u1', name: 'Ana Gómez', email: 'ana@correo.com' },
     });
     const { data } = prisma.refreshToken.create.mock.calls[0][0];
@@ -275,6 +284,8 @@ describe('SessionService.me', () => {
       id: 'u1',
       name: 'Ana Gómez',
       email: 'ana@correo.com',
+      hasWorkerProfile: false,
+      hasPublisherProfile: false,
     });
   });
 

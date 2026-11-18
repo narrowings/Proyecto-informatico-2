@@ -25,9 +25,13 @@ Requisitos: Node.js 24, pnpm 10 (`npm i -g pnpm@10`) y Docker.
 pnpm install
 cp .env.example apps/api/.env
 docker compose up -d          # PostgreSQL en :5432, Mailpit en http://localhost:8025
+pnpm --filter @red/api prisma:deploy
+pnpm --filter @red/api prisma:seed
 pnpm dev                      # web en :3000, api en :3001
 curl http://localhost:3001/v1/health
 ```
+
+El formulario de publicador usa la sesión de la API y guarda la foto o el logo junto con el perfil en PostgreSQL. En desarrollo, el proveedor de correo de `main` escribe el enlace de confirmación en la consola de la API. Para QA, configura el origen público de la API según la guía de `infra/qa`.
 
 ## Cómo trabajamos
 

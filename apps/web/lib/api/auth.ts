@@ -40,11 +40,12 @@ export type LoginResult =
 /** Versión de cada documento legal que el usuario acepta (HU-017). */
 export type LegalConsents = Omit<RegisterRequest['consents'], 'isAdult'>;
 
+export type LegalDocuments = Record<keyof LegalConsents, { version: string; url: string }>;
+
 export type AuthApi = {
+  currentDocuments(): Promise<LegalDocuments>;
   register(request: RegisterRequest): Promise<RegisterResult>;
   confirmEmail(token: string): Promise<ConfirmEmailResult>;
-  /** El token vencido identifica la cuenta a la que se reenvía el enlace. */
-  requestNewConfirmationLink(token: string): Promise<void>;
   login(request: LoginRequest): Promise<LoginResult>;
   /** Reenvía el enlace de confirmación a una cuenta sin confirmar (HU-021 CA4). */
   resendConfirmationLink(email: string): Promise<void>;

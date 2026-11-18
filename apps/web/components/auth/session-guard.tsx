@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { authApi } from '@/lib/api';
 import { getInactivityTimeoutMs, SESSION_EXPIRED_REASON } from '@/lib/auth/session';
@@ -13,6 +13,11 @@ const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'scroll', 'touchstart'] as co
  * (HU-021 CA5). Debe montarse en el layout de las pantallas con sesión iniciada.
  * No reemplaza la expiración del servidor, que es la que manda.
  */
+export function AppSessionGuard() {
+  const pathname = usePathname();
+  return pathname.startsWith('/publicadores/') ? null : <SessionGuard />;
+}
+
 export function SessionGuard({ timeoutMs = getInactivityTimeoutMs() }: { timeoutMs?: number }) {
   const router = useRouter();
 

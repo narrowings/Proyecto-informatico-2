@@ -1,15 +1,25 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { LEGAL_VERSIONS } from '@/lib/legal';
+
 import { ROUTES } from '@/lib/routes';
 import { RegisterForm } from './register-form';
 
+const documents = {
+  terms: { version: '0.1', url: '/legal/terminos' },
+  privacy: { version: '0.1', url: '/legal/privacidad' },
+  dataProcessing: { version: '0.1', url: '/legal/tratamiento-de-datos' },
+};
 const push = vi.fn();
 const register = vi.fn();
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
-vi.mock('@/lib/api', () => ({ authApi: { register: (...args: unknown[]) => register(...args) } }));
+vi.mock('@/lib/api', () => ({
+  authApi: {
+    currentDocuments: async () => documents,
+    register: (...args: unknown[]) => register(...args),
+  },
+}));
 
 const LABELS = {
   name: /^nombre/i,
@@ -115,7 +125,7 @@ describe('RegisterForm', () => {
       email: 'ana@example.com',
       phone: '3001234567',
       password: 'Segura123',
-      consents: { ...LEGAL_VERSIONS, isAdult: true },
+      consents: { ...{ terms: '0.1', privacy: '0.1', dataProcessing: '0.1' }, isAdult: true },
     });
   });
 
@@ -133,18 +143,20 @@ describe('RegisterForm', () => {
     expect(push).not.toHaveBeenCalled();
   });
 
-  it('enlaza los textos completos de los documentos legales (HU-017)', () => {
+  it('enlaza los textos completos de los documentos legales (HU-017)', async () => {
     render(<RegisterForm />);
-    expect(screen.getByRole('link', { name: /términos y condiciones/i })).toHaveAttribute(
-      'href',
-      ROUTES.terms,
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: /términos y condiciones/i })).toHaveAttribute(
+        'href',
+        documents.terms.url,
+      ),
     );
     expect(screen.getByRole('link', { name: /política de privacidad/i })).toHaveAttribute(
       'href',
-      ROUTES.privacy,
+      documents.privacy.url,
     );
     expect(
       screen.getByRole('link', { name: /tratamiento de mis datos personales/i }),
-    ).toHaveAttribute('href', ROUTES.dataProcessing);
+    ).toHaveAttribute('href', documents.dataProcessing.url);
   });
 });

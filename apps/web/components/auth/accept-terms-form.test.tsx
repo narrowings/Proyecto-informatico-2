@@ -1,16 +1,24 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { LEGAL_VERSIONS } from '@/lib/legal';
+
 import { ROUTES } from '@/lib/routes';
 import { AcceptTermsForm } from './accept-terms-form';
 
+const documents = {
+  terms: { version: '0.1', url: '/legal/terminos' },
+  privacy: { version: '0.1', url: '/legal/privacidad' },
+  dataProcessing: { version: '0.1', url: '/legal/tratamiento-de-datos' },
+};
 const replace = vi.fn();
 const acceptTerms = vi.fn();
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace }) }));
 vi.mock('@/lib/api', () => ({
-  authApi: { acceptTerms: (...args: unknown[]) => acceptTerms(...args) },
+  authApi: {
+    currentDocuments: async () => documents,
+    acceptTerms: (...args: unknown[]) => acceptTerms(...args),
+  },
 }));
 
 const button = () => screen.getByRole('button', { name: /aceptar y continuar/i });
@@ -48,6 +56,10 @@ describe('AcceptTermsForm', () => {
     await user.click(button());
 
     await waitFor(() => expect(replace).toHaveBeenCalledWith(ROUTES.home));
-    expect(acceptTerms).toHaveBeenCalledWith(LEGAL_VERSIONS);
+    expect(acceptTerms).toHaveBeenCalledWith({
+      terms: '0.1',
+      privacy: '0.1',
+      dataProcessing: '0.1',
+    });
   });
 });

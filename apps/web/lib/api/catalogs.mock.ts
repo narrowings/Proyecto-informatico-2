@@ -1,5 +1,4 @@
 import type { CatalogsApi, Category, Zone } from './catalogs';
-import { wait } from './mock-state';
 
 /*
  * Catálogos PROVISIONALES. Los oficiales los entrega José Alejandro (lista de la
@@ -28,11 +27,9 @@ const CATEGORIES: Category[] = [
 
 export const mockCatalogsApi: CatalogsApi = {
   async listZones() {
-    await wait(150);
     return ZONES;
   },
   async listCategories() {
-    await wait(150);
     return CATEGORIES;
   },
 };

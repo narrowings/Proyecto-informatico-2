@@ -24,26 +24,31 @@ export type WorkerProfile = CreateWorkerProfileRequest & {
 export type CreateWorkerProfileResult =
   { ok: true; profile: WorkerProfile } | { ok: false; reason: 'already_exists' };
 
-/** Contrato provisional de HU-008, alineado con PublisherProfile de T-01. */
+/** El formulario envía la imagen junto con los datos del perfil. */
 export type CreatePublisherProfileRequest = {
   displayName: string;
-  photoUrl: string;
+  photo: File;
   description: string;
 } & (
   | { kind: 'PERSON' }
   | { kind: 'COMPANY'; nit: string; nitCheckDigit: string; contactName: string; sector: string }
 );
 
-export type PublisherProfile = CreatePublisherProfileRequest & { id: string; isVerified: boolean };
-
-/** Lista explícita de datos públicos. Excluye NIT, representante y contacto. */
-export type PublicPublisherProfile = Pick<
-  PublisherProfile,
-  'id' | 'kind' | 'displayName' | 'photoUrl' | 'description' | 'isVerified'
->;
+export type PublicPublisherProfile = {
+  id: string;
+  kind: 'PERSON' | 'COMPANY';
+  displayName: string;
+  photoUrl: string;
+  description: string;
+  sector: string | null;
+  isVerified: boolean;
+  reputation: { average: number | null; ratingsCount: number; completedJobs: number };
+};
 
 export type CreatePublisherProfileResult =
-  { ok: true; profile: PublisherProfile } | { ok: false; reason: 'already_exists' };
+  | { ok: true; profile: { id: string } }
+  | { ok: false; reason: 'already_exists'; id: string }
+  | { ok: false; reason: 'nit_taken' };
 
 export type ProfilesApi = {
   /**

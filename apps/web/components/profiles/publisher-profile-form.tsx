@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { Alert, Button, ButtonLink, Field, Select, Textarea } from '@red/ui';
+import { ApiError } from '@/lib/api/http';
 import { profilesApi } from '@/lib/api';
 import {
   MAX_DESCRIPTION_LENGTH,
@@ -40,6 +41,7 @@ export function PublisherProfileForm() {
     control,
     getValues,
     setValue,
+    setError,
     handleSubmit,
     formState: { errors, isSubmitting, submitCount },
   } = useForm<PublisherProfileFormValues, unknown, PublisherProfileFormOutput>({
@@ -67,12 +69,34 @@ export function PublisherProfileForm() {
   const submit = handleSubmit(async (values) => {
     setOutcome(null);
     try {
-      const { photo, ...details } = values;
-      const { url } = await profilesApi.uploadProfilePhoto(photo);
-      const result = await profilesApi.createPublisherProfile({ ...details, photoUrl: url });
-      if (result.ok) setProfileId(result.profile.id);
-      setOutcome(result.ok ? 'created' : result.reason);
-    } catch {
+      const result = await profilesApi.createPublisherProfile(values);
+      if (!result.ok && result.reason === 'nit_taken') {
+        setError(
+          'nit',
+          { message: 'Ya existe una empresa registrada con este NIT.' },
+          { shouldFocus: true },
+        );
+        return;
+      }
+      setProfileId(result.ok ? result.profile.id : result.id);
+      setOutcome(result.ok ? 'created' : 'already_exists');
+    } catch (error) {
+      if (error instanceof ApiError) {
+        if (error.status === 401) {
+          router.replace(ROUTES.login);
+          return;
+        }
+        if (error.status === 413 || error.problem.errors?.photo) {
+          setError(
+            'photo',
+            {
+              message: error.problem.errors?.photo?.[0] ?? 'La imagen no puede pesar más de 5 MB.',
+            },
+            { shouldFocus: true },
+          );
+          return;
+        }
+      }
       setOutcome('error');
     }
   });

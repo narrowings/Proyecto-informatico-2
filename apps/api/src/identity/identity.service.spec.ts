@@ -26,6 +26,7 @@ const legalDocuments = [
 const setup = () => {
   const prisma = {
     user: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
+    consent: { count: vi.fn(), createMany: vi.fn() },
     legalDocument: { findMany: vi.fn().mockResolvedValue(legalDocuments) },
     emailConfirmationToken: {
       findUnique: vi.fn(),
@@ -44,6 +45,22 @@ const setup = () => {
   );
   return { prisma, mailer, service };
 };
+
+it('solicita las versiones pendientes al ingresar y conserva el primer consentimiento en los reintentos', async () => {
+  const { prisma, service } = setup();
+  prisma.consent.count.mockResolvedValueOnce(2).mockResolvedValueOnce(3);
+  expect(await service.requiresTermsAcceptance('u1')).toBe(true);
+  await expect(
+    service.acceptTerms('u1', { ...dto.consents, terms: 'anterior' }, '10.0.0.1'),
+  ).rejects.toBeInstanceOf(ConflictException);
+  expect(prisma.consent.createMany).not.toHaveBeenCalled();
+  await service.acceptTerms('u1', dto.consents, '10.0.0.1');
+  expect(prisma.consent.createMany).toHaveBeenCalledWith({
+    data: legalDocuments.map((doc) => ({ userId: 'u1', legalDocumentId: doc.id, ip: '10.0.0.1' })),
+    skipDuplicates: true,
+  });
+  expect(await service.requiresTermsAcceptance('u1')).toBe(false);
+});
 
 describe('IdentityService.register', () => {
   let ctx: ReturnType<typeof setup>;

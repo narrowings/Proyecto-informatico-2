@@ -1,7 +1,9 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Ip, Post, UseGuards } from '@nestjs/common';
 import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { ConfirmEmailDto, ResendConfirmationDto } from './dto/confirmation.dto';
-import { RegisterDto } from './dto/register.dto';
+import { AuthenticatedGuard } from '../common/auth/authenticated.guard';
+import { CurrentUser, type AuthUser } from '../common/auth/current-user.decorator';
+import { RegisterDto, LegalVersionsDto } from './dto/register.dto';
 import { IdentityService } from './identity.service';
 
 @Controller()
@@ -31,6 +33,13 @@ export class IdentityController {
   async resendConfirmation(@Body() dto: ResendConfirmationDto) {
     await this.identity.resendConfirmation(dto.email);
     return { message: 'Si la cuenta está pendiente de confirmación, enviamos un enlace nuevo' };
+  }
+
+  @Post('auth/consents')
+  @UseGuards(AuthenticatedGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  acceptTerms(@CurrentUser() user: AuthUser, @Body() versions: LegalVersionsDto, @Ip() ip: string) {
+    return this.identity.acceptTerms(user.id, versions, ip);
   }
 
   // Enlaces y versiones que muestra el formulario de registro (HU-017 CA1).

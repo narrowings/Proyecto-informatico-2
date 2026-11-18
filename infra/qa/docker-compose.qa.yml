@@ -68,6 +68,8 @@ services:
     build:
       context: ../..
       dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?Falta la URL pública de la API en qa.env}
     image: red-qa/web:latest
     environment:
       NODE_ENV: production

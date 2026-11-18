@@ -28,7 +28,7 @@ Requisitos: Docker con el plugin compose, git, curl y python3. El usuario (por d
 sudo mkdir -p /opt/red-qa && sudo chown "$USER" /opt/red-qa
 git clone https://github.com/narrowings/Proyecto-informatico-2.git /opt/red-qa/repo
 cp /opt/red-qa/repo/infra/qa/qa.env.example /opt/red-qa/qa.env
-nano /opt/red-qa/qa.env            # claves y WEB_URL
+nano /opt/red-qa/qa.env            # claves, WEB_URL y NEXT_PUBLIC_API_URL
 chmod 600 /opt/red-qa/qa.env
 
 # Primer despliegue a mano (tarda unos minutos la primera vez)
@@ -56,7 +56,7 @@ Si cloudflared es un contenedor, hay que conectarlo una vez a la red de QA:
 docker network connect red-qa <nombre-del-contenedor-cloudflared>
 ```
 
-`WEB_URL` en `qa.env` debe ser la URL pública del frontend (por ejemplo `https://qa.<dominio>`).
+En `qa.env`, configura `WEB_URL` con el origen público de la web y `NEXT_PUBLIC_API_URL` con el origen HTTPS de la API. Ambos deben pertenecer al mismo sitio para la cookie de sesión. La compilación de la web incorpora la URL de la API.
 
 ## Operación
 
@@ -72,4 +72,3 @@ Para borrar la base de QA y empezar de cero, agrega `-v` al `down` (se pierden t
 ## Pendiente
 
 - Revisión de seguridad de la exposición (Juan Andrés Montealegre).
-- CORS en la API cuando el frontend llame a `qa-api` desde el navegador.
