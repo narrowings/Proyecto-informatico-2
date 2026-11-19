@@ -2,3 +2,5 @@ pnpm-lock.yaml
 Documentos_necesarios/
 **/dist/
 **/.next/
+**/playwright-report/
+**/test-results/

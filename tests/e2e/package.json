@@ -1,0 +1,19 @@
+{
+  "name": "@red/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:e2e": "node run.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
+    "@playwright/test": "1.62.1",
+    "@prisma/client": "^6.2.1",
+    "@red/config": "workspace:*",
+    "@types/node": "^24.0.0",
+    "argon2": "^0.45.1"
+  }
+}
