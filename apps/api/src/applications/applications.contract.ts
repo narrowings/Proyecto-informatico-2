@@ -33,6 +33,13 @@ export interface ApplicationsContract {
   // Interesados de una oportunidad, del más antiguo al más reciente. No incluye WITHDRAWN.
   listForOpportunity(opportunityId: string): Promise<ApplicantSummary[]>;
 
+  // Perfil de trabajador del usuario y los ids de sus postulaciones (cualquier estado), para que
+  // engagements filtre "Mis selecciones" y "Mis trabajos" en la base. workerProfileId es null si el
+  // usuario no tiene perfil de trabajador.
+  listIdsForWorkerUser(
+    userId: string,
+  ): Promise<{ workerProfileId: string | null; applicationIds: string[] }>;
+
   // engagements marca ACCEPTED cuando el trabajador acepta la selección y REJECTED a los no
   // seleccionados al llenarse los cupos (RF-05-09). No notifica: eso lo hace quien llama.
   setStatus(applicationId: string, status: ApplicationStatus): Promise<void>;
