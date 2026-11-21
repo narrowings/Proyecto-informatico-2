@@ -13,8 +13,8 @@ export const SCHEDULER_INTERVAL_MS = 5 * 60 * 1000;
 @Injectable()
 export class SchedulerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(SchedulerService.name);
-  private temporizador?: ReturnType<typeof setInterval>;
-  private ejecutando = false;
+  private timer?: ReturnType<typeof setInterval>;
+  private isRunning = false;
 
   constructor(
     @Inject(EngagementsService) private readonly engagements: EngagementsService,
@@ -24,30 +24,30 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
   onModuleInit() {
     if (process.env.SCHEDULER_ENABLED === 'false') return;
     // Esta ejecución provisional se migrará a pg-boss.
-    this.temporizador = setInterval(() => void this.ejecutar(), SCHEDULER_INTERVAL_MS);
-    this.temporizador.unref();
+    this.timer = setInterval(() => void this.run(), SCHEDULER_INTERVAL_MS);
+    this.timer.unref();
   }
 
   onModuleDestroy() {
-    clearInterval(this.temporizador);
+    clearInterval(this.timer);
   }
 
-  private async ejecutar() {
-    if (this.ejecutando) return;
-    this.ejecutando = true;
+  private async run() {
+    if (this.isRunning) return;
+    this.isRunning = true;
     try {
-      const ahora = new Date();
-      const tareas = await Promise.allSettled([
-        this.engagements.expireSelections(ahora),
-        this.engagements.startDueJobs(ahora),
-        this.ratings.publishDueRatings(ahora),
+      const now = new Date();
+      const tasks = await Promise.allSettled([
+        this.engagements.expireSelections(now),
+        this.engagements.startDueJobs(now),
+        this.ratings.publishDueRatings(now),
       ]);
-      for (const tarea of tareas) {
-        if (tarea.status === 'rejected')
-          this.logger.error('Falló una transición programada', tarea.reason);
+      for (const task of tasks) {
+        if (task.status === 'rejected')
+          this.logger.error('Falló una transición programada', task.reason);
       }
     } finally {
-      this.ejecutando = false;
+      this.isRunning = false;
     }
   }
 }

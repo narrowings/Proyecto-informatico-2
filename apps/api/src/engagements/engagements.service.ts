@@ -7,7 +7,7 @@ import {
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
-import type { Job, Prisma, Selection } from '@prisma/client';
+import { Prisma, type Job, type Selection } from '@prisma/client';
 import {
   APPLICATIONS,
   type ApplicationsContract,
@@ -21,17 +21,17 @@ import {
 } from '../notifications/notifications.contract';
 import { OPPORTUNITIES, type OpportunitiesContract } from '../opportunities/opportunities.contract';
 import { PrismaService } from '../prisma/prisma.service';
-import { esErrorPrisma, transaccionSerializable } from '../prisma/transaccion-serializable';
+import { isPrismaError, serializableTransaction } from '../prisma/serializable-transaction';
 import { RatingsService } from '../ratings/ratings.service';
-import type { ListarTrabajosDto } from './engagements.dto';
+import type { ListJobsQuery } from './engagements.dto';
 
 export const SELECTION_TTL_MS = 24 * 60 * 60 * 1000;
 
-const noEncontrado = () =>
+const notFound = () =>
   new NotFoundException({ code: 'RESOURCE_NOT_FOUND', message: 'No encontramos el recurso' });
-const conflicto = (code: string, message: string) => new ConflictException({ code, message });
+const conflict = (code: string, message: string) => new ConflictException({ code, message });
 
-const mensajes = {
+const messages = {
   SELECTION_RECEIVED: 'Te seleccionaron para una oportunidad',
   SELECTION_ACCEPTED: 'Aceptaron la selección',
   SELECTION_REJECTED: 'Rechazaron la selección',
@@ -43,15 +43,22 @@ const mensajes = {
   RATING_AVAILABLE: 'Ya puedes calificar el trabajo',
 } satisfies Partial<Record<NotifyInput['type'], string>>;
 
-function evento(userId: string, type: keyof typeof mensajes, recursoId: string): NotifyInput {
+function event(
+  userId: string,
+  type: keyof typeof messages,
+  resourceId: string,
+  opportunityTitle: string,
+): NotifyInput {
+  const title = messages[type];
+  const description = title.charAt(0).toLowerCase() + title.slice(1);
   return {
     userId,
     type,
-    title: mensajes[type],
-    body: mensajes[type],
+    title,
+    body: `"${opportunityTitle}": ${description}`.slice(0, 500),
     link:
-      type === 'SELECTION_RECEIVED' ? `/mi-actividad/selecciones/${recursoId}` : '/mi-actividad',
-    data: { recursoId },
+      type === 'SELECTION_RECEIVED' ? `/mi-actividad/selecciones/${resourceId}` : '/mi-actividad',
+    data: { recursoId: resourceId },
   };
 }
 
@@ -61,124 +68,120 @@ export class EngagementsService {
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(OPPORTUNITIES) private readonly oportunidades: OpportunitiesContract,
-    @Inject(APPLICATIONS) private readonly postulaciones: ApplicationsContract,
-    @Inject(NOTIFICATIONS) private readonly notificaciones: NotificationsContract,
-    @Inject(IdentityService) private readonly identidad: IdentityService,
-    @Inject(forwardRef(() => RatingsService)) private readonly reputacion: RatingsService,
+    @Inject(OPPORTUNITIES) private readonly opportunities: OpportunitiesContract,
+    @Inject(APPLICATIONS) private readonly applications: ApplicationsContract,
+    @Inject(NOTIFICATIONS) private readonly notifications: NotificationsContract,
+    @Inject(IdentityService) private readonly identity: IdentityService,
+    @Inject(forwardRef(() => RatingsService)) private readonly ratings: RatingsService,
   ) {}
 
-  private async avisar(eventos: NotifyInput[]) {
-    if (!eventos.length) return;
+  private async notify(events: NotifyInput[]) {
+    if (!events.length) return;
     try {
-      await this.notificaciones.notifyMany(eventos);
+      await this.notifications.notifyMany(events);
     } catch {
       this.logger.error('No se pudieron emitir las notificaciones de selección o trabajo');
     }
   }
 
-  private async oportunidadPropia(id: string, usuarioId: string) {
-    const oportunidad = await this.oportunidades.getForEngagement(id);
-    if (!oportunidad || oportunidad.publisherUserId !== usuarioId) throw noEncontrado();
-    return oportunidad;
+  private async getOwnedOpportunity(id: string, userId: string) {
+    const opportunity = await this.opportunities.getForEngagement(id);
+    if (!opportunity || opportunity.publisherUserId !== userId) throw notFound();
+    return opportunity;
   }
 
-  private async seleccionesDe(
+  private async findSelections(
     tx: Prisma.TransactionClient,
-    postulaciones: Pick<ApplicationWithParties, 'id'>[],
+    applications: Pick<ApplicationWithParties, 'id'>[],
   ) {
     return tx.selection.findMany({
-      where: { applicationId: { in: postulaciones.map(({ id }) => id) } },
+      where: { applicationId: { in: applications.map(({ id }) => id) } },
     });
   }
 
-  private cuposOcupados(selecciones: Selection[], trabajosCancelados: { selectionId: string }[]) {
-    const cancelados = new Set(trabajosCancelados.map(({ selectionId }) => selectionId));
-    return selecciones.filter(
-      ({ id, status }) => status === 'PENDING' || (status === 'ACCEPTED' && !cancelados.has(id)),
+  private countTakenSlots(selections: Selection[], findCancelledJobs: { selectionId: string }[]) {
+    const cancelledJobs = new Set(findCancelledJobs.map(({ selectionId }) => selectionId));
+    return selections.filter(
+      ({ id, status }) => status === 'PENDING' || (status === 'ACCEPTED' && !cancelledJobs.has(id)),
     ).length;
   }
 
-  private trabajosCancelados(tx: Prisma.TransactionClient, opportunityId: string) {
+  private findCancelledJobs(tx: Prisma.TransactionClient, opportunityId: string) {
     return tx.job.findMany({
       where: { opportunityId, status: 'CANCELLED' },
       select: { selectionId: true },
     });
   }
 
-  async aspirantes(id: string, usuarioId: string) {
-    const oportunidad = await this.oportunidadPropia(id, usuarioId);
-    if (oportunidad.type === 'FORMAL_JOB') {
-      throw conflicto('OPPORTUNITY_NOT_OPEN', 'La oportunidad no admite selecciones');
+  async listApplicants(id: string, userId: string) {
+    const opportunity = await this.getOwnedOpportunity(id, userId);
+    if (opportunity.type === 'FORMAL_JOB') {
+      throw conflict('OPPORTUNITY_NOT_OPEN', 'La oportunidad no admite selecciones');
     }
-    const postulaciones = await this.postulaciones.listForOpportunity(id);
-    const { selecciones, cancelados } = await transaccionSerializable(this.prisma, async (tx) => ({
-      selecciones: await this.seleccionesDe(tx, postulaciones),
-      cancelados: await this.trabajosCancelados(tx, id),
-    }));
-    const estados = new Map(
-      selecciones.map(({ applicationId, status }) => [applicationId, status]),
+    const applications = await this.applications.listForOpportunity(id);
+    const { selections, cancelledJobs } = await serializableTransaction(
+      this.prisma,
+      async (tx) => ({
+        selections: await this.findSelections(tx, applications),
+        cancelledJobs: await this.findCancelledJobs(tx, id),
+      }),
+    );
+    const statuses = new Map(
+      selections.map(({ applicationId, status }) => [applicationId, status]),
     );
     const applicants = await Promise.all(
-      postulaciones.map(async (postulacion) => ({
-        ...postulacion,
-        selectionStatus: estados.get(postulacion.id) ?? null,
-        reputation: await this.reputacion.getSummary(postulacion.workerUserId, 'WORKER'),
+      applications.map(async (application) => ({
+        ...application,
+        selectionStatus: statuses.get(application.id) ?? null,
+        reputation: await this.ratings.getSummary(application.workerUserId, 'WORKER'),
       })),
     );
     return {
       applicants,
-      selected: this.cuposOcupados(selecciones, cancelados),
-      needed: oportunidad.peopleNeeded,
+      selected: this.countTakenSlots(selections, cancelledJobs),
+      needed: opportunity.peopleNeeded,
     };
   }
 
-  async seleccionar(id: string, usuarioId: string, applicationIds: string[]) {
-    const verificarOportunidad = async () => {
-      const oportunidad = await this.oportunidadPropia(id, usuarioId);
-      if (
-        oportunidad.status !== 'ACTIVE' ||
-        oportunidad.type === 'FORMAL_JOB' ||
-        !oportunidad.peopleNeeded
-      ) {
-        throw conflicto('OPPORTUNITY_NOT_OPEN', 'La oportunidad no admite selecciones');
-      }
-      return oportunidad.peopleNeeded;
-    };
-    const needed = await verificarOportunidad();
-    const seleccionadas = await Promise.all(
-      applicationIds.map((postulacionId) => this.postulaciones.getWithParties(postulacionId)),
+  async select(id: string, userId: string, applicationIds: string[]) {
+    const opportunity = await this.getOwnedOpportunity(id, userId);
+    const needed = opportunity.peopleNeeded;
+    if (opportunity.status !== 'ACTIVE' || opportunity.type === 'FORMAL_JOB' || !needed) {
+      throw conflict('OPPORTUNITY_NOT_OPEN', 'La oportunidad no admite selecciones');
+    }
+    const selectedApplications = await Promise.all(
+      applicationIds.map((applicationId) => this.applications.getWithParties(applicationId)),
     );
     if (
-      seleccionadas.some(
-        (postulacion) => !postulacion || postulacion.opportunityId !== id.toLowerCase(),
+      selectedApplications.some(
+        (application) => !application || application.opportunityId !== id.toLowerCase(),
       )
     ) {
-      throw noEncontrado();
+      throw notFound();
     }
 
-    let nuevas: Selection[];
+    let newSelections: Selection[];
     try {
-      nuevas = await transaccionSerializable(this.prisma, async (tx) => {
-        const postulaciones = await this.postulaciones.listForOpportunity(id);
-        const recibidas = new Set(
-          postulaciones.filter(({ status }) => status === 'RECEIVED').map(({ id }) => id),
+      newSelections = await serializableTransaction(this.prisma, async (tx) => {
+        const applications = await this.applications.listForOpportunity(id);
+        const received = new Set(
+          applications.filter(({ status }) => status === 'RECEIVED').map(({ id }) => id),
         );
-        const existentes = await this.seleccionesDe(tx, postulaciones);
-        const previas = new Set(existentes.map(({ applicationId }) => applicationId));
+        const existing = await this.findSelections(tx, applications);
+        const previous = new Set(existing.map(({ applicationId }) => applicationId));
         if (
           applicationIds.some(
-            (applicationId) => !recibidas.has(applicationId) || previas.has(applicationId),
+            (applicationId) => !received.has(applicationId) || previous.has(applicationId),
           )
         ) {
-          throw conflicto(
+          throw conflict(
             'APPLICATION_NOT_SELECTABLE',
             'Una postulación ya no está disponible para seleccionar',
           );
         }
-        const cancelados = await this.trabajosCancelados(tx, id);
-        if (this.cuposOcupados(existentes, cancelados) + applicationIds.length > needed) {
-          throw conflicto('SELECTION_LIMIT_REACHED', 'La selección supera los cupos disponibles');
+        const cancelledJobs = await this.findCancelledJobs(tx, id);
+        if (this.countTakenSlots(existing, cancelledJobs) + applicationIds.length > needed) {
+          throw conflict('SELECTION_LIMIT_REACHED', 'La selección supera los cupos disponibles');
         }
         const expiresAt = new Date(Date.now() + SELECTION_TTL_MS);
         return tx.selection.createManyAndReturn({
@@ -186,151 +189,166 @@ export class EngagementsService {
         });
       });
     } catch (error) {
-      if (esErrorPrisma(error, 'P2002')) {
-        throw conflicto('APPLICATION_NOT_SELECTABLE', 'Una postulación ya tiene selección');
+      if (isPrismaError(error, 'P2002')) {
+        throw conflict('APPLICATION_NOT_SELECTABLE', 'Una postulación ya tiene selección');
       }
       throw error;
     }
-    const trabajadores = new Map(
-      seleccionadas.map((postulacion) => [postulacion!.id, postulacion!.workerUserId]),
+    const workers = new Map(
+      selectedApplications.map((application) => [application!.id, application!.workerUserId]),
     );
-    await this.avisar(
-      nuevas.map((seleccion) =>
-        evento(trabajadores.get(seleccion.applicationId)!, 'SELECTION_RECEIVED', seleccion.id),
+    await this.notify(
+      newSelections.map((selection) =>
+        event(
+          workers.get(selection.applicationId)!,
+          'SELECTION_RECEIVED',
+          selection.id,
+          opportunity.title,
+        ),
       ),
     );
-    return nuevas;
+    return newSelections;
   }
 
-  async seleccionesPropias(usuarioId: string) {
-    const pendientes = await this.prisma.selection.findMany({
-      where: { status: 'PENDING', expiresAt: { gt: new Date() } },
+  async listOwnSelections(userId: string) {
+    const { applicationIds } = await this.applications.listIdsForWorkerUser(userId);
+    if (!applicationIds.length) return [];
+    const pending = await this.prisma.selection.findMany({
+      where: {
+        applicationId: { in: applicationIds },
+        status: 'PENDING',
+        expiresAt: { gt: new Date() },
+      },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
-    const resultados = await Promise.all(
-      pendientes.map(async (seleccion) => {
-        const postulacion = await this.postulaciones.getWithParties(seleccion.applicationId);
-        if (postulacion?.workerUserId !== usuarioId) return null;
-        const oportunidad = await this.oportunidades.getForEngagement(postulacion.opportunityId);
-        if (!oportunidad) return null;
-        const { id, title, zone, scheduledAt } = oportunidad;
+    const results = await Promise.all(
+      pending.map(async (selection) => {
+        const application = await this.applications.getWithParties(selection.applicationId);
+        if (application?.workerUserId !== userId) return null;
+        const opportunity = await this.opportunities.getForEngagement(application.opportunityId);
+        if (!opportunity) return null;
+        const { id, title, zone, scheduledAt } = opportunity;
         return {
-          id: seleccion.id,
-          status: seleccion.status,
-          expiresAt: seleccion.expiresAt,
+          id: selection.id,
+          status: selection.status,
+          expiresAt: selection.expiresAt,
           opportunity: { id, title, zone, scheduledAt },
         };
       }),
     );
-    return resultados.filter((resultado) => resultado !== null);
+    return results.filter((result) => result !== null);
   }
 
-  private async seleccionPropia(id: string, usuarioId: string) {
-    const seleccion = await this.prisma.selection.findUnique({ where: { id } });
-    if (!seleccion) throw noEncontrado();
-    const postulacion = await this.postulaciones.getWithParties(seleccion.applicationId);
-    if (!postulacion || postulacion.workerUserId !== usuarioId) throw noEncontrado();
-    const oportunidad = await this.oportunidades.getForEngagement(postulacion.opportunityId);
-    if (!oportunidad) throw noEncontrado();
-    return { seleccion, postulacion, oportunidad };
+  private async getOwnedSelection(id: string, userId: string) {
+    const selection = await this.prisma.selection.findUnique({ where: { id } });
+    if (!selection) throw notFound();
+    const application = await this.applications.getWithParties(selection.applicationId);
+    if (!application || application.workerUserId !== userId) throw notFound();
+    const opportunity = await this.opportunities.getForEngagement(application.opportunityId);
+    if (!opportunity) throw notFound();
+    return { selection, application, opportunity };
   }
 
-  async aceptar(id: string, usuarioId: string, acceptTerms: true) {
+  async accept(id: string, userId: string, acceptTerms: true) {
     if (acceptTerms !== true) {
       throw new BadRequestException({
         message: 'Revisa los campos marcados',
         errors: { acceptTerms: ['Debes aceptar los términos del trabajo'] },
       });
     }
-    const { postulacion, oportunidad } = await this.seleccionPropia(id, usuarioId);
+    const { application, opportunity } = await this.getOwnedSelection(id, userId);
     if (
-      !oportunidad.scheduledAt ||
-      !oportunidad.peopleNeeded ||
-      oportunidad.type === 'FORMAL_JOB' ||
-      oportunidad.status !== 'ACTIVE' ||
-      postulacion.status !== 'RECEIVED'
+      !opportunity.scheduledAt ||
+      !opportunity.peopleNeeded ||
+      opportunity.type === 'FORMAL_JOB' ||
+      opportunity.status !== 'ACTIVE' ||
+      application.status !== 'RECEIVED'
     ) {
-      throw conflicto('SELECTION_NOT_AVAILABLE', 'La selección ya no está disponible');
+      throw conflict('SELECTION_NOT_AVAILABLE', 'La selección ya no está disponible');
     }
-    const { scheduledAt, peopleNeeded } = oportunidad;
-    const { trabajo, descartar, llena } = await transaccionSerializable(this.prisma, async (tx) => {
-      const ahora = new Date();
-      const cambio = await tx.selection.updateMany({
-        where: { id, status: 'PENDING', expiresAt: { gt: ahora } },
-        data: { status: 'ACCEPTED', respondedAt: ahora, termsAcceptedAt: ahora },
+    const { scheduledAt, peopleNeeded } = opportunity;
+    const { job, rejected, isFilled } = await serializableTransaction(this.prisma, async (tx) => {
+      const now = new Date();
+      const result = await tx.selection.updateMany({
+        where: { id, status: 'PENDING', expiresAt: { gt: now } },
+        data: { status: 'ACCEPTED', respondedAt: now, termsAcceptedAt: now },
       });
-      if (!cambio.count)
-        throw conflicto('SELECTION_NOT_AVAILABLE', 'La selección ya fue respondida o venció');
-      const trabajo = await tx.job.create({
+      if (!result.count)
+        throw conflict('SELECTION_NOT_AVAILABLE', 'La selección ya fue respondida o venció');
+      const job = await tx.job.create({
         data: {
           selectionId: id,
-          opportunityId: oportunidad.id,
-          workerProfileId: postulacion.workerProfileId,
+          opportunityId: opportunity.id,
+          workerProfileId: application.workerProfileId,
           scheduledAt,
         },
       });
-      const aceptadas = await tx.job.count({
-        where: { opportunityId: oportunidad.id, status: { not: 'CANCELLED' } },
+      const accepted = await tx.job.count({
+        where: { opportunityId: opportunity.id, status: { not: 'CANCELLED' } },
       });
-      const llena = aceptadas >= peopleNeeded;
-      const descartar = [];
-      if (llena) {
-        const interesados = await this.postulaciones.listForOpportunity(oportunidad.id);
-        const existentes = new Set(
-          (await this.seleccionesDe(tx, interesados)).map(({ applicationId }) => applicationId),
+      const isFilled = accepted >= peopleNeeded;
+      const rejected = [];
+      if (isFilled) {
+        const applicants = await this.applications.listForOpportunity(opportunity.id);
+        const existing = new Set(
+          (await this.findSelections(tx, applicants)).map(({ applicationId }) => applicationId),
         );
-        descartar.push(
-          ...interesados.filter(
-            (interesado) => interesado.status === 'RECEIVED' && !existentes.has(interesado.id),
+        rejected.push(
+          ...applicants.filter(
+            (applicant) => applicant.status === 'RECEIVED' && !existing.has(applicant.id),
           ),
         );
       }
-      return { trabajo, descartar, llena };
+      return { job, rejected, isFilled };
     });
 
-    await this.postulaciones.setStatus(postulacion.id, 'ACCEPTED');
-    if (llena) {
-      await this.oportunidades.markFilled(oportunidad.id);
-      await Promise.all(descartar.map(({ id }) => this.postulaciones.setStatus(id, 'REJECTED')));
+    await this.applications.setStatus(application.id, 'ACCEPTED');
+    if (isFilled) {
+      await this.opportunities.markFilled(opportunity.id);
+      await Promise.all(rejected.map(({ id }) => this.applications.setStatus(id, 'REJECTED')));
     }
-    await this.avisar([
-      evento(oportunidad.publisherUserId, 'SELECTION_ACCEPTED', id),
-      ...descartar.map(({ workerUserId, id }) =>
-        evento(workerUserId, 'APPLICATION_STATUS_CHANGED', id),
+    await this.notify([
+      event(opportunity.publisherUserId, 'SELECTION_ACCEPTED', id, opportunity.title),
+      ...rejected.map(({ workerUserId, id }) =>
+        event(workerUserId, 'APPLICATION_STATUS_CHANGED', id, opportunity.title),
       ),
     ]);
-    return trabajo;
+    return job;
   }
 
-  async rechazar(id: string, usuarioId: string) {
-    const { oportunidad } = await this.seleccionPropia(id, usuarioId);
-    const ahora = new Date();
-    const cambio = await this.prisma.selection.updateMany({
-      where: { id, status: 'PENDING', expiresAt: { gt: ahora } },
-      data: { status: 'REJECTED', respondedAt: ahora },
+  async reject(id: string, userId: string) {
+    const { opportunity } = await this.getOwnedSelection(id, userId);
+    const now = new Date();
+    const result = await this.prisma.selection.updateMany({
+      where: { id, status: 'PENDING', expiresAt: { gt: now } },
+      data: { status: 'REJECTED', respondedAt: now },
     });
-    if (!cambio.count)
-      throw conflicto('SELECTION_NOT_AVAILABLE', 'La selección ya fue respondida o venció');
-    await this.oportunidades.reopenIfFilled(oportunidad.id);
-    await this.avisar([evento(oportunidad.publisherUserId, 'SELECTION_REJECTED', id)]);
+    if (!result.count)
+      throw conflict('SELECTION_NOT_AVAILABLE', 'La selección ya fue respondida o venció');
+    await this.opportunities.reopenIfFilled(opportunity.id);
+    await this.notify([
+      event(opportunity.publisherUserId, 'SELECTION_REJECTED', id, opportunity.title),
+    ]);
   }
 
   async expireSelections(now: Date) {
-    const pendientes = await this.prisma.selection.findMany({
+    const pending = await this.prisma.selection.findMany({
       where: { status: 'PENDING', expiresAt: { lte: now } },
     });
-    for (const { id, applicationId } of pendientes) {
-      const cambio = await this.prisma.selection.updateMany({
+    for (const { id, applicationId } of pending) {
+      const result = await this.prisma.selection.updateMany({
         where: { id, status: 'PENDING', expiresAt: { lte: now } },
         data: { status: 'EXPIRED', respondedAt: now },
       });
-      if (!cambio.count) continue;
-      const postulacion = await this.postulaciones.getWithParties(applicationId);
-      if (!postulacion) continue;
-      const oportunidad = await this.oportunidades.getForEngagement(postulacion.opportunityId);
-      if (!oportunidad) continue;
-      await this.oportunidades.reopenIfFilled(oportunidad.id);
-      await this.avisar([evento(oportunidad.publisherUserId, 'SELECTION_EXPIRED', id)]);
+      if (!result.count) continue;
+      const application = await this.applications.getWithParties(applicationId);
+      if (!application) continue;
+      const opportunity = await this.opportunities.getForEngagement(application.opportunityId);
+      if (!opportunity) continue;
+      await this.opportunities.reopenIfFilled(opportunity.id);
+      await this.notify([
+        event(opportunity.publisherUserId, 'SELECTION_EXPIRED', id, opportunity.title),
+      ]);
     }
   }
 
@@ -341,162 +359,180 @@ export class EngagementsService {
     });
   }
 
-  private async partesDelTrabajo(trabajo: Job) {
-    const [seleccion, oportunidad] = await Promise.all([
-      this.prisma.selection.findUnique({ where: { id: trabajo.selectionId } }),
-      this.oportunidades.getForEngagement(trabajo.opportunityId),
+  private async resolveJobParties(job: Job) {
+    const [selection, opportunity] = await Promise.all([
+      this.prisma.selection.findUnique({ where: { id: job.selectionId } }),
+      this.opportunities.getForEngagement(job.opportunityId),
     ]);
-    if (!oportunidad || !seleccion || seleccion.status !== 'ACCEPTED' || !seleccion.termsAcceptedAt)
+    if (!opportunity || !selection || selection.status !== 'ACCEPTED' || !selection.termsAcceptedAt)
       return null;
-    const postulacion = await this.postulaciones.getWithParties(seleccion.applicationId);
-    if (!postulacion) return null;
+    const application = await this.applications.getWithParties(selection.applicationId);
+    if (!application) return null;
     return {
-      trabajo,
-      oportunidad,
-      workerUserId: postulacion.workerUserId,
-      publisherUserId: oportunidad.publisherUserId,
+      job,
+      opportunity,
+      workerUserId: application.workerUserId,
+      publisherUserId: opportunity.publisherUserId,
     };
   }
 
   async getJobParties(id: string) {
-    const trabajo = await this.prisma.job.findUnique({ where: { id } });
-    const partes = trabajo && (await this.partesDelTrabajo(trabajo));
+    const job = await this.prisma.job.findUnique({ where: { id } });
+    const parties = job && (await this.resolveJobParties(job));
     return (
-      partes && {
-        status: partes.trabajo.status,
-        workerUserId: partes.workerUserId,
-        publisherUserId: partes.publisherUserId,
+      parties && {
+        status: parties.job.status,
+        workerUserId: parties.workerUserId,
+        publisherUserId: parties.publisherUserId,
       }
     );
   }
 
-  private async trabajoPropio(id: string, usuarioId: string) {
-    const trabajo = await this.prisma.job.findUnique({ where: { id } });
-    const partes = trabajo && (await this.partesDelTrabajo(trabajo));
-    if (!partes || ![partes.workerUserId, partes.publisherUserId].includes(usuarioId))
-      throw noEncontrado();
-    const contraparteId =
-      partes.workerUserId === usuarioId ? partes.publisherUserId : partes.workerUserId;
-    return { ...partes, contraparteId };
+  private async getOwnedJob(id: string, userId: string) {
+    const job = await this.prisma.job.findUnique({ where: { id } });
+    const parties = job && (await this.resolveJobParties(job));
+    if (!parties || ![parties.workerUserId, parties.publisherUserId].includes(userId))
+      throw notFound();
+    const counterpartId =
+      parties.workerUserId === userId ? parties.publisherUserId : parties.workerUserId;
+    return { ...parties, counterpartId };
   }
 
-  async trabajosPropios(usuarioId: string, { page, pageSize, role, state }: ListarTrabajosDto) {
-    const estados: Job['status'][] =
+  async listOwnJobs(userId: string, { page, pageSize, role, state }: ListJobsQuery) {
+    const statuses: Job['status'][] =
       state === 'active' ? ['SCHEDULED', 'IN_PROGRESS'] : ['COMPLETED', 'CANCELLED'];
-    const items = [];
-    let cursor: string | undefined;
-    let omitidos = (page - 1) * pageSize;
-    let hasMore = false;
-    // Los contratos actuales solo resuelven las partes por ID. Se consultan lotes de trabajos propios.
-    do {
-      const lote = await this.prisma.job.findMany({
-        where: { status: { in: estados } },
-        orderBy: [{ scheduledAt: 'desc' }, { id: 'desc' }],
-        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-        take: 50,
-      });
-      if (!lote.length) break;
-      const partes = await Promise.all(lote.map((trabajo) => this.partesDelTrabajo(trabajo)));
-      for (const fila of partes) {
-        if (!fila || (role === 'worker' ? fila.workerUserId : fila.publisherUserId) !== usuarioId)
-          continue;
-        if (omitidos > 0) {
-          omitidos--;
-          continue;
-        }
-        if (items.length === pageSize) {
-          hasMore = true;
-          break;
-        }
-        const contraparteId = role === 'worker' ? fila.publisherUserId : fila.workerUserId;
-        const contacto = await this.identidad.getContact(contraparteId);
-        const { title, type, zone } = fila.oportunidad;
-        const { id, status, scheduledAt } = fila.trabajo;
-        items.push({
+    const where: Prisma.JobWhereInput = { status: { in: statuses } };
+    if (role === 'worker') {
+      const { workerProfileId } = await this.applications.listIdsForWorkerUser(userId);
+      if (!workerProfileId) return { items: [], total: 0, page, pageSize };
+      where.workerProfileId = workerProfileId;
+    } else {
+      const opportunityIds = await this.opportunities.listIdsForPublisherUser(userId);
+      if (!opportunityIds.length) return { items: [], total: 0, page, pageSize };
+      where.opportunityId = { in: opportunityIds };
+    }
+
+    const [total, jobs] = await this.prisma.$transaction(
+      [
+        this.prisma.job.count({ where }),
+        this.prisma.job.findMany({
+          where,
+          orderBy: [{ scheduledAt: 'desc' }, { id: 'desc' }],
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+        }),
+      ],
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    );
+    const items = await Promise.all(
+      jobs.map(async (job) => {
+        const parties = await this.resolveJobParties(job);
+        if (!parties) return null;
+        const counterpartId = role === 'worker' ? parties.publisherUserId : parties.workerUserId;
+        const contact = await this.identity.getContact(counterpartId);
+        const { title, type, zone } = parties.opportunity;
+        const { id, status, scheduledAt } = job;
+        return {
           id,
           title,
           type,
           zone,
           status,
           scheduledAt,
-          counterparty: { name: contacto?.name ?? null },
-        });
-      }
-      cursor = lote.length === 50 ? lote.at(-1)?.id : undefined;
-    } while (cursor && !hasMore);
-    return { items, hasMore, page, pageSize };
+          counterparty: { name: contact?.name ?? null },
+        };
+      }),
+    );
+    return { items: items.filter((item) => item !== null), total, page, pageSize };
   }
 
-  async detalleTrabajo(id: string, usuarioId: string) {
-    const { trabajo, oportunidad, contraparteId } = await this.trabajoPropio(id, usuarioId);
+  async getJobDetail(id: string, userId: string) {
+    const { job, opportunity, counterpartId } = await this.getOwnedJob(id, userId);
     const [counterparty, hasRated] = await Promise.all([
-      this.identidad.getContact(contraparteId),
-      this.reputacion.yaCalifico(id, usuarioId),
+      this.identity.getContact(counterpartId),
+      this.ratings.hasRated(id, userId),
     ]);
-    const { title, type, zone, exactAddress } = oportunidad;
-    return { ...trabajo, title, type, zone, exactAddress, counterparty, hasRated };
+    const { title, type, zone, exactAddress } = opportunity;
+    return {
+      id: job.id,
+      status: job.status,
+      scheduledAt: job.scheduledAt,
+      finishMarkedAt: job.finishMarkedAt,
+      completedAt: job.completedAt,
+      cancelledAt: job.cancelledAt,
+      cancelReason: job.cancelReason,
+      createdAt: job.createdAt,
+      title,
+      type,
+      zone,
+      exactAddress,
+      counterparty: counterparty && { name: counterparty.name, phone: counterparty.phone },
+      hasRated,
+      finishMarkedByMe: job.finishMarkedById === userId,
+      cancelledByMe: job.cancelledById === userId,
+    };
   }
 
-  async marcarTerminado(id: string, usuarioId: string) {
-    const { contraparteId } = await this.trabajoPropio(id, usuarioId);
-    const cambio = await this.prisma.job.updateMany({
+  async markFinished(id: string, userId: string) {
+    const { counterpartId, opportunity } = await this.getOwnedJob(id, userId);
+    const result = await this.prisma.job.updateMany({
       where: { id, status: 'IN_PROGRESS', finishMarkedById: null },
-      data: { finishMarkedAt: new Date(), finishMarkedById: usuarioId },
+      data: { finishMarkedAt: new Date(), finishMarkedById: userId },
     });
-    if (cambio.count) {
-      await this.avisar([evento(contraparteId, 'JOB_FINISH_MARKED', id)]);
+    if (result.count) {
+      await this.notify([event(counterpartId, 'JOB_FINISH_MARKED', id, opportunity.title)]);
       return;
     }
-    const actual = await this.prisma.job.findUnique({ where: { id } });
-    if (actual?.status === 'IN_PROGRESS' && actual.finishMarkedById === usuarioId) return;
-    throw conflicto('JOB_FINISH_NOT_AVAILABLE', 'El trabajo no se puede marcar como terminado');
+    const current = await this.prisma.job.findUnique({ where: { id } });
+    if (current?.status === 'IN_PROGRESS' && current.finishMarkedById === userId) return;
+    throw conflict('JOB_FINISH_NOT_AVAILABLE', 'El trabajo no se puede marcar como terminado');
   }
 
-  async confirmarTerminado(id: string, usuarioId: string) {
-    const { trabajo, workerUserId, publisherUserId } = await this.trabajoPropio(id, usuarioId);
-    if (trabajo.status !== 'IN_PROGRESS' || !trabajo.finishMarkedById) {
-      throw conflicto(
+  async confirmFinished(id: string, userId: string) {
+    const { job, workerUserId, publisherUserId, opportunity } = await this.getOwnedJob(id, userId);
+    if (job.status !== 'IN_PROGRESS' || !job.finishMarkedById) {
+      throw conflict(
         'JOB_FINISH_NOT_AVAILABLE',
         'El trabajo debe estar en curso y marcado como terminado',
       );
     }
-    if (trabajo.finishMarkedById === usuarioId) {
-      throw conflicto(
+    if (job.finishMarkedById === userId) {
+      throw conflict(
         'FINISH_NEEDS_OTHER_PARTY',
         'La otra parte debe confirmar la finalización del trabajo',
       );
     }
-    await transaccionSerializable(this.prisma, async (tx) => {
-      const cambio = await tx.job.updateMany({
-        where: { id, status: 'IN_PROGRESS', finishMarkedById: trabajo.finishMarkedById },
+    await serializableTransaction(this.prisma, async (tx) => {
+      const result = await tx.job.updateMany({
+        where: { id, status: 'IN_PROGRESS', finishMarkedById: job.finishMarkedById },
         data: { status: 'COMPLETED', completedAt: new Date() },
       });
-      if (!cambio.count)
-        throw conflicto('JOB_FINISH_NOT_AVAILABLE', 'El trabajo ya no se puede confirmar');
-      await this.reputacion.recordCompletedJob(workerUserId, publisherUserId, tx);
+      if (!result.count)
+        throw conflict('JOB_FINISH_NOT_AVAILABLE', 'El trabajo ya no se puede confirmar');
+      await this.ratings.recordCompletedJob(workerUserId, publisherUserId, tx);
     });
-    await this.avisar(
-      [workerUserId, publisherUserId].flatMap((usuario) => [
-        evento(usuario, 'JOB_COMPLETED', id),
-        evento(usuario, 'RATING_AVAILABLE', id),
+    await this.notify(
+      [workerUserId, publisherUserId].flatMap((user) => [
+        event(user, 'JOB_COMPLETED', id, opportunity.title),
+        event(user, 'RATING_AVAILABLE', id, opportunity.title),
       ]),
     );
   }
 
-  async cancelarTrabajo(id: string, usuarioId: string, reason: string) {
-    const { oportunidad, contraparteId } = await this.trabajoPropio(id, usuarioId);
-    const cambio = await this.prisma.job.updateMany({
+  async cancelJob(id: string, userId: string, reason: string) {
+    const { opportunity, counterpartId } = await this.getOwnedJob(id, userId);
+    const result = await this.prisma.job.updateMany({
       where: { id, status: 'SCHEDULED' },
       data: {
         status: 'CANCELLED',
         cancelledAt: new Date(),
-        cancelledById: usuarioId,
+        cancelledById: userId,
         cancelReason: reason,
       },
     });
-    if (!cambio.count)
-      throw conflicto('JOB_CANNOT_BE_CANCELLED', 'Solo puedes cancelar un trabajo programado');
-    await this.oportunidades.reopenIfFilled(oportunidad.id);
-    await this.avisar([evento(contraparteId, 'JOB_CANCELLED', id)]);
+    if (!result.count)
+      throw conflict('JOB_CANNOT_BE_CANCELLED', 'Solo puedes cancelar un trabajo programado');
+    await this.opportunities.reopenIfFilled(opportunity.id);
+    await this.notify([event(counterpartId, 'JOB_CANCELLED', id, opportunity.title)]);
   }
 }

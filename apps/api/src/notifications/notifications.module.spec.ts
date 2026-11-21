@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { NotifyInput } from './notifications.contract';
-import { NotificacionesPersistentes } from './notifications.module';
+import { PersistentNotificationsService } from './notifications.module';
 
 describe('HU-014 Notificaciones provisionales', () => {
   it('guarda la fila y no propaga un fallo de persistencia', async () => {
@@ -9,10 +9,10 @@ describe('HU-014 Notificaciones provisionales', () => {
       .fn()
       .mockResolvedValueOnce({ count: 1 })
       .mockRejectedValueOnce(new Error('Sin conexión'));
-    const servicio = new NotificacionesPersistentes({
+    const service = new PersistentNotificationsService({
       notification: { createMany },
     } as unknown as PrismaService);
-    const evento: NotifyInput = {
+    const event: NotifyInput = {
       userId: 'u',
       type: 'JOB_COMPLETED',
       title: 'Trabajo completado',
@@ -20,8 +20,8 @@ describe('HU-014 Notificaciones provisionales', () => {
       link: '/mi-actividad',
       data: { recursoId: 't' },
     };
-    await servicio.notify(evento);
-    expect(createMany).toHaveBeenCalledWith({ data: [evento] });
-    await expect(servicio.notifyMany([evento])).resolves.toBeUndefined();
+    await service.notify(event);
+    expect(createMany).toHaveBeenCalledWith({ data: [event] });
+    await expect(service.notifyMany([event])).resolves.toBeUndefined();
   });
 });

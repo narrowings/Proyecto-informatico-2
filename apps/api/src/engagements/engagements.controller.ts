@@ -13,12 +13,12 @@ import {
 import { AuthenticatedGuard } from '../common/auth/authenticated.guard';
 import { CurrentUser, type AuthUser } from '../common/auth/current-user.decorator';
 import { uuidPipe } from '../common/http/uuid';
-import { validarDto } from '../common/http/validar-dto';
+import { validateDto } from '../common/http/validate-dto';
 import {
-  AceptarSeleccionDto,
-  CancelarTrabajoDto,
-  ListarTrabajosDto,
-  SeleccionarDto,
+  AcceptSelectionDto,
+  CancelJobDto,
+  ListJobsQuery,
+  SelectApplicantsDto,
 } from './engagements.dto';
 import { EngagementsService } from './engagements.service';
 
@@ -28,72 +28,72 @@ export class EngagementsController {
   constructor(@Inject(EngagementsService) private readonly engagements: EngagementsService) {}
 
   @Get('opportunities/:id/applicants')
-  aspirantes(@CurrentUser() usuario: AuthUser, @Param('id', uuidPipe) id: string) {
-    return this.engagements.aspirantes(id, usuario.id);
+  listApplicants(@CurrentUser() user: AuthUser, @Param('id', uuidPipe) id: string) {
+    return this.engagements.listApplicants(id, user.id);
   }
 
   @Post('opportunities/:id/selections')
-  seleccionar(
-    @CurrentUser() usuario: AuthUser,
+  select(
+    @CurrentUser() user: AuthUser,
     @Param('id', uuidPipe) id: string,
-    @Body(validarDto(SeleccionarDto)) dto: SeleccionarDto,
+    @Body(validateDto(SelectApplicantsDto)) dto: SelectApplicantsDto,
   ) {
-    return this.engagements.seleccionar(id, usuario.id, dto.applicationIds);
+    return this.engagements.select(id, user.id, dto.applicationIds);
   }
 
   @Get('selections/mine')
-  propias(@CurrentUser() usuario: AuthUser) {
-    return this.engagements.seleccionesPropias(usuario.id);
+  listOwnSelections(@CurrentUser() user: AuthUser) {
+    return this.engagements.listOwnSelections(user.id);
   }
 
   @Post('selections/:id/accept')
   @HttpCode(HttpStatus.OK)
-  aceptar(
-    @CurrentUser() usuario: AuthUser,
+  accept(
+    @CurrentUser() user: AuthUser,
     @Param('id', uuidPipe) id: string,
-    @Body(validarDto(AceptarSeleccionDto)) dto: AceptarSeleccionDto,
+    @Body(validateDto(AcceptSelectionDto)) dto: AcceptSelectionDto,
   ) {
-    return this.engagements.aceptar(id, usuario.id, dto.acceptTerms);
+    return this.engagements.accept(id, user.id, dto.acceptTerms);
   }
 
   @Post('selections/:id/reject')
   @HttpCode(HttpStatus.NO_CONTENT)
-  rechazar(@CurrentUser() usuario: AuthUser, @Param('id', uuidPipe) id: string) {
-    return this.engagements.rechazar(id, usuario.id);
+  reject(@CurrentUser() user: AuthUser, @Param('id', uuidPipe) id: string) {
+    return this.engagements.reject(id, user.id);
   }
 
   @Get('jobs')
-  trabajos(
-    @CurrentUser() usuario: AuthUser,
-    @Query(validarDto(ListarTrabajosDto)) consulta: ListarTrabajosDto,
+  listOwnJobs(
+    @CurrentUser() user: AuthUser,
+    @Query(validateDto(ListJobsQuery)) query: ListJobsQuery,
   ) {
-    return this.engagements.trabajosPropios(usuario.id, consulta);
+    return this.engagements.listOwnJobs(user.id, query);
   }
 
   @Get('jobs/:id')
-  detalle(@CurrentUser() usuario: AuthUser, @Param('id', uuidPipe) id: string) {
-    return this.engagements.detalleTrabajo(id, usuario.id);
+  getJobDetail(@CurrentUser() user: AuthUser, @Param('id', uuidPipe) id: string) {
+    return this.engagements.getJobDetail(id, user.id);
   }
 
   @Post('jobs/:id/finish')
   @HttpCode(HttpStatus.NO_CONTENT)
-  terminar(@CurrentUser() usuario: AuthUser, @Param('id', uuidPipe) id: string) {
-    return this.engagements.marcarTerminado(id, usuario.id);
+  markFinished(@CurrentUser() user: AuthUser, @Param('id', uuidPipe) id: string) {
+    return this.engagements.markFinished(id, user.id);
   }
 
   @Post('jobs/:id/confirm-finish')
   @HttpCode(HttpStatus.NO_CONTENT)
-  confirmar(@CurrentUser() usuario: AuthUser, @Param('id', uuidPipe) id: string) {
-    return this.engagements.confirmarTerminado(id, usuario.id);
+  confirmFinished(@CurrentUser() user: AuthUser, @Param('id', uuidPipe) id: string) {
+    return this.engagements.confirmFinished(id, user.id);
   }
 
   @Post('jobs/:id/cancel')
   @HttpCode(HttpStatus.NO_CONTENT)
-  cancelar(
-    @CurrentUser() usuario: AuthUser,
+  cancelJob(
+    @CurrentUser() user: AuthUser,
     @Param('id', uuidPipe) id: string,
-    @Body(validarDto(CancelarTrabajoDto)) dto: CancelarTrabajoDto,
+    @Body(validateDto(CancelJobDto)) dto: CancelJobDto,
   ) {
-    return this.engagements.cancelarTrabajo(id, usuario.id, dto.reason);
+    return this.engagements.cancelJob(id, user.id, dto.reason);
   }
 }

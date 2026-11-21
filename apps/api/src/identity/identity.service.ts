@@ -186,7 +186,7 @@ export class IdentityService {
     return documents;
   }
 
-  async tieneCredencialVigente(userId: string, passwordHash: string, tx: Prisma.TransactionClient) {
+  async hasCurrentCredential(userId: string, passwordHash: string, tx: Prisma.TransactionClient) {
     return Boolean(
       await tx.user.findUnique({
         where: { id: userId, passwordHash, status: AccountStatus.ACTIVE },

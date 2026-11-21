@@ -1,19 +1,19 @@
 import { Body, Controller, HttpCode, HttpStatus, Inject, Post, UseGuards } from '@nestjs/common';
 import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
-import { validarDto } from '../common/http/validar-dto';
-import { RestablecerContrasenaDto, SolicitarRestablecimientoDto } from './dto/password-reset.dto';
+import { validateDto } from '../common/http/validate-dto';
+import { ResetPasswordDto, ForgotPasswordDto } from './dto/password-reset.dto';
 import { PasswordResetService } from './password-reset.service';
 
 @Controller('auth')
 @UseGuards(ThrottlerGuard)
 export class PasswordResetController {
-  constructor(@Inject(PasswordResetService) private readonly recuperacion: PasswordResetService) {}
+  constructor(@Inject(PasswordResetService) private readonly passwordReset: PasswordResetService) {}
 
   @Post('forgot-password')
   @HttpCode(HttpStatus.ACCEPTED)
   @Throttle({ ip: { limit: 3 }, email: { limit: 3 } })
-  solicitar(@Body(validarDto(SolicitarRestablecimientoDto)) dto: SolicitarRestablecimientoDto) {
-    this.recuperacion.programarEnvio(dto.email);
+  forgotPassword(@Body(validateDto(ForgotPasswordDto)) dto: ForgotPasswordDto) {
+    this.passwordReset.scheduleResetEmail(dto.email);
     return { message: 'Si el correo está registrado, recibirás un enlace' };
   }
 
@@ -21,7 +21,7 @@ export class PasswordResetController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @Throttle({ ip: { limit: 5 } })
   @SkipThrottle({ email: true })
-  restablecer(@Body(validarDto(RestablecerContrasenaDto)) dto: RestablecerContrasenaDto) {
-    return this.recuperacion.restablecer(dto);
+  resetPassword(@Body(validateDto(ResetPasswordDto)) dto: ResetPasswordDto) {
+    return this.passwordReset.resetPassword(dto);
   }
 }

@@ -10,18 +10,18 @@ import { RatingsService } from './ratings.service';
 describe('HU-007 Calificaciones por HTTP', () => {
   let app: INestApplication;
   let url: string;
-  const servicio = { calificar: vi.fn().mockResolvedValue({ id: 'r' }) };
+  const service = { rate: vi.fn().mockResolvedValue({ id: 'r' }) };
 
   beforeAll(async () => {
     @Module({
       controllers: [RatingsController],
-      providers: [{ provide: RatingsService, useValue: servicio }],
+      providers: [{ provide: RatingsService, useValue: service }],
     })
-    class ModuloPrueba {}
-    app = await NestFactory.create(ModuloPrueba, { logger: false, abortOnError: false });
+    class TestModule {}
+    app = await NestFactory.create(TestModule, { logger: false, abortOnError: false });
     app.use((req: Request, _res: Response, next: NextFunction) => {
-      const usuario = req.header('x-test-user');
-      if (usuario) (req as AuthenticatedRequest).user = { id: usuario };
+      const user = req.header('x-test-user');
+      if (user) (req as AuthenticatedRequest).user = { id: user };
       next();
     });
     app.setGlobalPrefix('v1');
@@ -33,13 +33,13 @@ describe('HU-007 Calificaciones por HTTP', () => {
   afterAll(() => app?.close());
 
   it.each([0, 6, 3.5])('rechaza %s como puntuación de cumplimiento', async (fulfillment) => {
-    const respuesta = await fetch(url, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-test-user': 'trabajador' },
       body: JSON.stringify({ fulfillment, punctuality: 3, communication: 4, quality: 5 }),
     });
-    expect(respuesta.status).toBe(400);
-    expect(await respuesta.json()).toMatchObject({ errors: { fulfillment: expect.any(Array) } });
-    expect(servicio.calificar).not.toHaveBeenCalled();
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ errors: { fulfillment: expect.any(Array) } });
+    expect(service.rate).not.toHaveBeenCalled();
   });
 });

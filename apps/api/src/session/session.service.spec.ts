@@ -37,24 +37,24 @@ const setup = () => {
     },
   };
   const accessTokens = { sign: vi.fn().mockResolvedValue({ token: 'jwt', expiresIn: 900 }) };
-  const identidad = {
+  const identity = {
     requiresTermsAcceptance: vi.fn().mockResolvedValue(false),
-    tieneCredencialVigente: vi.fn().mockResolvedValue(true),
+    hasCurrentCredential: vi.fn().mockResolvedValue(true),
   };
   const service = new SessionService(
     {
       ...prisma,
-      $transaction: (operacion: (tx: typeof prisma) => unknown) => operacion(prisma),
+      $transaction: (operation: (tx: typeof prisma) => unknown) => operation(prisma),
     } as unknown as PrismaService,
     accessTokens as unknown as AccessTokenService,
-    identidad as unknown as IdentityService,
+    identity as unknown as IdentityService,
     {
       getProfileSummary: vi
         .fn()
         .mockResolvedValue({ hasWorkerProfile: false, hasPublisherProfile: false }),
     } as unknown as ProfilesService,
   );
-  return { prisma, accessTokens, service, identidad };
+  return { prisma, accessTokens, service, identity };
 };
 
 const rejection = (promise: Promise<unknown>) =>
@@ -87,9 +87,9 @@ describe('SessionService.login', () => {
   });
 
   it('HU-018: un inicio simultáneo con la contraseña anterior no crea otra sesión', async () => {
-    const { prisma, service, identidad } = setup();
+    const { prisma, service, identity } = setup();
     prisma.user.findUnique.mockResolvedValue(userWith('ACTIVE'));
-    identidad.tieneCredencialVigente.mockResolvedValue(false);
+    identity.hasCurrentCredential.mockResolvedValue(false);
 
     await expect(service.login(dto, meta)).rejects.toMatchObject({
       response: { code: 'INVALID_CREDENTIALS' },

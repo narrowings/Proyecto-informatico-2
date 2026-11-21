@@ -6,7 +6,7 @@ import { ProfilesService } from '../profiles/profiles.service';
 import { IdentityService } from '../identity/identity.service';
 import { createToken, hashToken } from '../identity/tokens';
 import { PrismaService } from '../prisma/prisma.service';
-import { transaccionSerializable } from '../prisma/transaccion-serializable';
+import { serializableTransaction } from '../prisma/serializable-transaction';
 import { AccessTokenService } from './access-token.service';
 import type { LoginDto } from './dto/login.dto';
 import {
@@ -53,10 +53,10 @@ export class SessionService {
 
     const requiresTermsAcceptance = await this.identity.requiresTermsAcceptance(user.id);
     const { token: refreshToken, hash: tokenHash } = createToken();
-    await transaccionSerializable(this.prisma, async (tx) => {
+    await serializableTransaction(this.prisma, async (tx) => {
       // La contraseña pudo cambiar mientras se verificaba el hash.
-      const vigente = await this.identity.tieneCredencialVigente(user.id, hash, tx);
-      if (!vigente) throw new UnauthorizedException(INVALID_CREDENTIALS);
+      const isCurrent = await this.identity.hasCurrentCredential(user.id, hash, tx);
+      if (!isCurrent) throw new UnauthorizedException(INVALID_CREDENTIALS);
       await tx.refreshToken.create({
         data: {
           userId: user.id,
@@ -102,7 +102,7 @@ export class SessionService {
 
     const { token: nextToken, hash } = createToken();
     // Reclamar el token y emitir el siguiente son una sola operación frente a la revocación.
-    const rotado = await transaccionSerializable(this.prisma, async (tx) => {
+    const rotated = await serializableTransaction(this.prisma, async (tx) => {
       const claimed = await tx.refreshToken.updateMany({
         where: { id: current.id, rotatedAt: null, revokedAt: null },
         data: { rotatedAt: now, lastUsedAt: now },
@@ -120,7 +120,7 @@ export class SessionService {
       });
       return true;
     });
-    if (!rotado) {
+    if (!rotated) {
       await this.revokeFamily(current.familyId);
       throw new UnauthorizedException(SESSION_EXPIRED);
     }

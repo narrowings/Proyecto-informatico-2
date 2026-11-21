@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 
 export abstract class PasswordResetMailer {
-  abstract send(correo: { to: string; name: string; link: string }): Promise<void>;
+  abstract send(email: { to: string; name: string; link: string }): Promise<void>;
 }
 
 // Implementación provisional de desarrollo mientras se conecta el correo transaccional.

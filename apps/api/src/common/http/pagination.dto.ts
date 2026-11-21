@@ -1,7 +1,7 @@
 import { Type } from 'class-transformer';
 import { IsInt, Max, Min } from 'class-validator';
 
-export class PaginacionDto {
+export class PaginationDto {
   @Type(() => Number)
   @IsInt({ message: 'La página debe ser un entero' })
   @Min(1, { message: 'La página mínima es 1' })

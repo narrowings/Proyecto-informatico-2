@@ -4,10 +4,10 @@ import type { EngagementsService } from '../engagements/engagements.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import { RATING_PUBLICATION_TTL_MS, RatingsService } from './ratings.service';
 
-const calificacion = { fulfillment: 5, punctuality: 3, communication: 2, quality: 1 };
+const rating = { fulfillment: 5, punctuality: 3, communication: 2, quality: 1 };
 
-function preparar() {
-  const partes = {
+function setup() {
+  const parties = {
     getJobParties: vi.fn().mockResolvedValue({
       workerUserId: 'trabajador',
       publisherUserId: 'publicador',
@@ -16,7 +16,7 @@ function preparar() {
   };
   const tx = {
     rating: {
-      create: vi.fn().mockResolvedValue({ ...calificacion, id: 'r', publishedAt: null }),
+      create: vi.fn().mockResolvedValue({ ...rating, id: 'r', publishedAt: null }),
       count: vi.fn().mockResolvedValue(1),
       findMany: vi.fn().mockResolvedValue([]),
       updateMany: vi.fn(),
@@ -27,49 +27,52 @@ function preparar() {
     },
     reputationSummary: { upsert: vi.fn(), findUnique: vi.fn().mockResolvedValue(null) },
   };
-  const prisma = { ...tx, $transaction: (operar: (cliente: typeof tx) => unknown) => operar(tx) };
+  const prisma = {
+    ...tx,
+    $transaction: (operation: (client: typeof tx) => unknown) => operation(tx),
+  };
   return {
-    partes,
+    parties,
     tx,
-    servicio: new RatingsService(
+    service: new RatingsService(
       prisma as unknown as PrismaService,
-      partes as unknown as EngagementsService,
+      parties as unknown as EngagementsService,
     ),
   };
 }
 
 describe('HU-007 Calificaciones', () => {
   it('rechaza una calificación duplicada', async () => {
-    const { servicio, tx } = preparar();
+    const { service, tx } = setup();
     tx.rating.create.mockRejectedValue(
       new Prisma.PrismaClientKnownRequestError('Duplicada', { code: 'P2002', clientVersion: '6' }),
     );
-    await expect(servicio.calificar('t', 'trabajador', calificacion)).rejects.toMatchObject({
+    await expect(service.rate('t', 'trabajador', rating)).rejects.toMatchObject({
       response: { code: 'ALREADY_RATED' },
     });
   });
 
   it('rechaza calificar trabajos que no están completados', async () => {
-    const { servicio, tx, partes } = preparar();
-    partes.getJobParties.mockResolvedValue({ workerUserId: 'trabajador', status: 'IN_PROGRESS' });
-    await expect(servicio.calificar('t', 'trabajador', calificacion)).rejects.toMatchObject({
+    const { service, tx, parties } = setup();
+    parties.getJobParties.mockResolvedValue({ workerUserId: 'trabajador', status: 'IN_PROGRESS' });
+    await expect(service.rate('t', 'trabajador', rating)).rejects.toMatchObject({
       response: { code: 'JOB_NOT_COMPLETED' },
     });
     expect(tx.rating.create).not.toHaveBeenCalled();
   });
 
   it('publica ambas cuando llega la segunda y calcula los promedios a dos decimales', async () => {
-    const { servicio, tx } = preparar();
+    const { service, tx } = setup();
     tx.rating.count.mockResolvedValueOnce(1).mockResolvedValueOnce(2);
     tx.rating.findMany.mockResolvedValue([
       { rateeUserId: 'publicador', rateeRole: 'PUBLISHER' },
       { rateeUserId: 'trabajador', rateeRole: 'WORKER' },
     ]);
-    await expect(servicio.calificar('t', 'trabajador', calificacion)).resolves.toMatchObject({
+    await expect(service.rate('t', 'trabajador', rating)).resolves.toMatchObject({
       publishedAt: null,
     });
     expect(tx.rating.updateMany).not.toHaveBeenCalled();
-    await expect(servicio.calificar('t', 'publicador', calificacion)).resolves.toMatchObject({
+    await expect(service.rate('t', 'publicador', rating)).resolves.toMatchObject({
       publishedAt: expect.any(Date),
     });
     expect(tx.rating.updateMany).toHaveBeenCalledWith({
@@ -92,28 +95,28 @@ describe('HU-007 Calificaciones', () => {
   });
 
   it('publica exactamente a los 7 días y no un milisegundo antes', async () => {
-    const { servicio, tx } = preparar();
-    const creada = new Date('2026-11-13T00:00:00Z');
+    const { service, tx } = setup();
+    const created = new Date('2026-11-13T00:00:00Z');
     tx.rating.findMany.mockImplementation(({ where }) =>
       Promise.resolve(
-        where.createdAt.lte >= creada
+        where.createdAt.lte >= created
           ? [{ rateeUserId: 'publicador', rateeRole: 'PUBLISHER' }]
           : [],
       ),
     );
-    await servicio.publishDueRatings(new Date(creada.getTime() + RATING_PUBLICATION_TTL_MS - 1));
+    await service.publishDueRatings(new Date(created.getTime() + RATING_PUBLICATION_TTL_MS - 1));
     expect(tx.rating.updateMany).not.toHaveBeenCalled();
-    const publicada = new Date(creada.getTime() + RATING_PUBLICATION_TTL_MS);
-    await servicio.publishDueRatings(publicada);
+    const published = new Date(created.getTime() + RATING_PUBLICATION_TTL_MS);
+    await service.publishDueRatings(published);
     expect(tx.rating.updateMany).toHaveBeenCalledExactlyOnceWith({
-      where: { createdAt: { lte: creada }, publishedAt: null },
-      data: { publishedAt: publicada },
+      where: { createdAt: { lte: created }, publishedAt: null },
+      data: { publishedAt: published },
     });
   });
 
   it('HU-046 muestra como nueva a una persona sin calificaciones públicas', async () => {
-    const { servicio } = preparar();
-    await expect(servicio.getSummary('trabajador', 'WORKER')).resolves.toMatchObject({
+    const { service } = setup();
+    await expect(service.getSummary('trabajador', 'WORKER')).resolves.toMatchObject({
       isNew: true,
       average: null,
       ratingsCount: 0,

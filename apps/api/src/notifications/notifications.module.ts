@@ -8,8 +8,8 @@ import {
 } from './notifications.contract';
 
 @Injectable()
-export class NotificacionesPersistentes implements NotificationsContract {
-  private readonly logger = new Logger(NotificacionesPersistentes.name);
+export class PersistentNotificationsService implements NotificationsContract {
+  private readonly logger = new Logger(PersistentNotificationsService.name);
 
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
@@ -30,7 +30,7 @@ export class NotificacionesPersistentes implements NotificationsContract {
 @Global()
 @Module({
   imports: [PrismaModule],
-  providers: [{ provide: NOTIFICATIONS, useClass: NotificacionesPersistentes }],
+  providers: [{ provide: NOTIFICATIONS, useClass: PersistentNotificationsService }],
   exports: [NOTIFICATIONS],
 })
 export class NotificationsModule {}

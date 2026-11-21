@@ -6,21 +6,21 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { Prisma, type RatedRole } from '@prisma/client';
-import type { PaginacionDto } from '../common/http/paginacion.dto';
+import type { PaginationDto } from '../common/http/pagination.dto';
 import { EngagementsService } from '../engagements/engagements.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { esErrorPrisma, transaccionSerializable } from '../prisma/transaccion-serializable';
-import type { CalificacionDto } from './ratings.dto';
+import { isPrismaError, serializableTransaction } from '../prisma/serializable-transaction';
+import type { CreateRatingDto } from './ratings.dto';
 
 export const RATING_PUBLICATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const dimensiones = {
+const dimensions = {
   fulfillment: true,
   punctuality: true,
   communication: true,
   quality: true,
 } as const;
-const datosPublicos = {
-  ...dimensiones,
+const publicFields = {
+  ...dimensions,
   id: true,
   comment: true,
   rateeRole: true,
@@ -35,38 +35,38 @@ export class RatingsService {
     @Inject(forwardRef(() => EngagementsService)) private readonly engagements: EngagementsService,
   ) {}
 
-  async calificar(jobId: string, usuarioId: string, dto: CalificacionDto) {
-    const trabajo = await this.engagements.getJobParties(jobId);
-    if (!trabajo || ![trabajo.workerUserId, trabajo.publisherUserId].includes(usuarioId)) {
+  async rate(jobId: string, userId: string, dto: CreateRatingDto) {
+    const job = await this.engagements.getJobParties(jobId);
+    if (!job || ![job.workerUserId, job.publisherUserId].includes(userId)) {
       throw new NotFoundException({ code: 'JOB_NOT_FOUND', message: 'No encontramos el trabajo' });
     }
-    if (trabajo.status !== 'COMPLETED') {
+    if (job.status !== 'COMPLETED') {
       throw new ConflictException({
         code: 'JOB_NOT_COMPLETED',
         message: 'El trabajo debe estar completado',
       });
     }
-    const esTrabajador = trabajo.workerUserId === usuarioId;
+    const isWorker = job.workerUserId === userId;
     try {
-      return await transaccionSerializable(this.prisma, async (tx) => {
-        const calificacion = await tx.rating.create({
+      return await serializableTransaction(this.prisma, async (tx) => {
+        const rating = await tx.rating.create({
           data: {
             ...dto,
             jobId,
-            raterUserId: usuarioId,
-            rateeUserId: esTrabajador ? trabajo.publisherUserId : trabajo.workerUserId,
-            rateeRole: esTrabajador ? 'PUBLISHER' : 'WORKER',
+            raterUserId: userId,
+            rateeUserId: isWorker ? job.publisherUserId : job.workerUserId,
+            rateeRole: isWorker ? 'PUBLISHER' : 'WORKER',
           },
-          select: datosPublicos,
+          select: publicFields,
         });
         const total = await tx.rating.count({ where: { jobId } });
-        if (total < 2) return calificacion;
-        const ahora = new Date();
-        await this.publicar(tx, { jobId }, ahora);
-        return { ...calificacion, publishedAt: ahora };
+        if (total < 2) return rating;
+        const now = new Date();
+        await this.publish(tx, { jobId }, now);
+        return { ...rating, publishedAt: now };
       });
     } catch (error) {
-      if (esErrorPrisma(error, 'P2002')) {
+      if (isPrismaError(error, 'P2002')) {
         throw new ConflictException({
           code: 'ALREADY_RATED',
           message: 'Ya calificaste este trabajo',
@@ -77,8 +77,8 @@ export class RatingsService {
   }
 
   publishDueRatings(now: Date) {
-    return transaccionSerializable(this.prisma, (tx) =>
-      this.publicar(
+    return serializableTransaction(this.prisma, (tx) =>
+      this.publish(
         tx,
         { createdAt: { lte: new Date(now.getTime() - RATING_PUBLICATION_TTL_MS) } },
         now,
@@ -86,31 +86,27 @@ export class RatingsService {
     );
   }
 
-  private async publicar(
-    tx: Prisma.TransactionClient,
-    filtro: Prisma.RatingWhereInput,
-    ahora: Date,
-  ) {
-    const where = { ...filtro, publishedAt: null };
-    const receptores = await tx.rating.findMany({
+  private async publish(tx: Prisma.TransactionClient, filter: Prisma.RatingWhereInput, now: Date) {
+    const where = { ...filter, publishedAt: null };
+    const ratees = await tx.rating.findMany({
       where,
       select: { rateeUserId: true, rateeRole: true },
       distinct: ['rateeUserId', 'rateeRole'],
       orderBy: [{ rateeUserId: 'asc' }, { rateeRole: 'asc' }],
     });
-    if (!receptores.length) return;
-    await tx.rating.updateMany({ where, data: { publishedAt: ahora } });
-    for (const { rateeUserId, rateeRole } of receptores) {
+    if (!ratees.length) return;
+    await tx.rating.updateMany({ where, data: { publishedAt: now } });
+    for (const { rateeUserId, rateeRole } of ratees) {
       const { _avg, _count } = await tx.rating.aggregate({
         where: { rateeUserId, rateeRole, publishedAt: { not: null } },
-        _avg: dimensiones,
+        _avg: dimensions,
         _count: true,
       });
       const fulfillment = new Prisma.Decimal(_avg.fulfillment ?? 0);
       const punctuality = new Prisma.Decimal(_avg.punctuality ?? 0);
       const communication = new Prisma.Decimal(_avg.communication ?? 0);
       const quality = new Prisma.Decimal(_avg.quality ?? 0);
-      const valores = {
+      const values = {
         ratingsCount: _count,
         avgFulfillment: fulfillment.toDecimalPlaces(2),
         avgPunctuality: punctuality.toDecimalPlaces(2),
@@ -125,8 +121,8 @@ export class RatingsService {
       };
       await tx.reputationSummary.upsert({
         where: { userId_role: { userId: rateeUserId, role: rateeRole } },
-        create: { userId: rateeUserId, role: rateeRole, ...valores },
-        update: valores,
+        create: { userId: rateeUserId, role: rateeRole, ...values },
+        update: values,
       });
     }
   }
@@ -136,21 +132,21 @@ export class RatingsService {
     publisherUserId: string,
     tx: Prisma.TransactionClient,
   ) {
-    const partes = [
+    const parties = [
       { userId: workerUserId, role: 'WORKER' },
       { userId: publisherUserId, role: 'PUBLISHER' },
     ] as const;
-    for (const parte of partes) {
+    for (const party of parties) {
       await tx.reputationSummary.upsert({
-        where: { userId_role: parte },
-        create: { ...parte, completedJobs: 1 },
+        where: { userId_role: party },
+        create: { ...party, completedJobs: 1 },
         update: { completedJobs: { increment: 1 } },
       });
     }
   }
 
   async getSummary(userId: string, role: RatedRole) {
-    const [resumen, comentarios] = await Promise.all([
+    const [summary, comments] = await Promise.all([
       this.prisma.reputationSummary.findUnique({ where: { userId_role: { userId, role } } }),
       this.prisma.rating.findMany({
         where: {
@@ -164,24 +160,24 @@ export class RatingsService {
         take: 5,
       }),
     ]);
-    const ratingsCount = resumen?.ratingsCount ?? 0;
+    const ratingsCount = summary?.ratingsCount ?? 0;
     return {
-      average: resumen?.avgOverall?.toNumber() ?? null,
-      fulfillment: resumen?.avgFulfillment?.toNumber() ?? null,
-      punctuality: resumen?.avgPunctuality?.toNumber() ?? null,
-      communication: resumen?.avgCommunication?.toNumber() ?? null,
-      quality: resumen?.avgQuality?.toNumber() ?? null,
+      average: summary?.avgOverall?.toNumber() ?? null,
+      fulfillment: summary?.avgFulfillment?.toNumber() ?? null,
+      punctuality: summary?.avgPunctuality?.toNumber() ?? null,
+      communication: summary?.avgCommunication?.toNumber() ?? null,
+      quality: summary?.avgQuality?.toNumber() ?? null,
       ratingsCount,
-      completedJobs: resumen?.completedJobs ?? 0,
+      completedJobs: summary?.completedJobs ?? 0,
       isNew: ratingsCount === 0,
-      recentComments: comentarios.map(({ comment, publishedAt }) => ({
+      recentComments: comments.map(({ comment, publishedAt }) => ({
         text: comment,
         date: publishedAt,
       })),
     };
   }
 
-  async yaCalifico(jobId: string, raterUserId: string) {
+  async hasRated(jobId: string, raterUserId: string) {
     return Boolean(
       await this.prisma.rating.findUnique({
         where: { jobId_raterUserId: { jobId, raterUserId } },
@@ -190,17 +186,17 @@ export class RatingsService {
     );
   }
 
-  async propias(usuarioId: string, { page, pageSize }: PaginacionDto) {
-    const where = { rateeUserId: usuarioId, publishedAt: { not: null } };
+  async listOwn(userId: string, { page, pageSize }: PaginationDto) {
+    const where = { rateeUserId: userId, publishedAt: { not: null } };
     const [worker, publisher, [total, items]] = await Promise.all([
-      this.getSummary(usuarioId, 'WORKER'),
-      this.getSummary(usuarioId, 'PUBLISHER'),
+      this.getSummary(userId, 'WORKER'),
+      this.getSummary(userId, 'PUBLISHER'),
       this.prisma.$transaction(
         [
           this.prisma.rating.count({ where }),
           this.prisma.rating.findMany({
             where,
-            select: datosPublicos,
+            select: publicFields,
             orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
             skip: (page - 1) * pageSize,
             take: pageSize,

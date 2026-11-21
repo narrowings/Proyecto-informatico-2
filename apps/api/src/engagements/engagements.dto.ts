@@ -10,9 +10,9 @@ import {
   IsUUID,
   Length,
 } from 'class-validator';
-import { PaginacionDto } from '../common/http/paginacion.dto';
+import { PaginationDto } from '../common/http/pagination.dto';
 
-export class SeleccionarDto {
+export class SelectApplicantsDto {
   @IsArray({ message: 'Envía una lista de postulaciones' })
   @ArrayMinSize(1, { message: 'Selecciona al menos una postulación' })
   @ArrayMaxSize(50, { message: 'Puedes seleccionar máximo 50 postulaciones' })
@@ -26,12 +26,12 @@ export class SeleccionarDto {
   applicationIds!: string[];
 }
 
-export class AceptarSeleccionDto {
+export class AcceptSelectionDto {
   @Equals(true, { message: 'Debes aceptar los términos del trabajo' })
   acceptTerms!: true;
 }
 
-export class ListarTrabajosDto extends PaginacionDto {
+export class ListJobsQuery extends PaginationDto {
   @IsIn(['worker', 'publisher'], { message: 'El rol debe ser trabajador o publicador' })
   role!: 'worker' | 'publisher';
 
@@ -39,7 +39,7 @@ export class ListarTrabajosDto extends PaginacionDto {
   state!: 'active' | 'finished';
 }
 
-export class CancelarTrabajoDto {
+export class CancelJobDto {
   @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   @IsString({ message: 'El motivo debe ser texto' })
   @Length(5, 500, { message: 'El motivo debe tener entre 5 y 500 caracteres' })

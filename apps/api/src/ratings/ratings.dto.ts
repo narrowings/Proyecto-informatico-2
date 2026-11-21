@@ -1,6 +1,6 @@
 import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
-export class CalificacionDto {
+export class CreateRatingDto {
   @IsInt({ message: 'El cumplimiento debe ser un entero' })
   @Min(1, { message: 'El cumplimiento mínimo es 1' })
   @Max(5, { message: 'El cumplimiento máximo es 5' })

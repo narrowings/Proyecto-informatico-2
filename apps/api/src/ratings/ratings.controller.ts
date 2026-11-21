@@ -1,10 +1,10 @@
 import { Body, Controller, Get, Inject, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { AuthenticatedGuard } from '../common/auth/authenticated.guard';
 import { CurrentUser, type AuthUser } from '../common/auth/current-user.decorator';
-import { PaginacionDto } from '../common/http/paginacion.dto';
+import { PaginationDto } from '../common/http/pagination.dto';
 import { uuidPipe } from '../common/http/uuid';
-import { validarDto } from '../common/http/validar-dto';
-import { CalificacionDto } from './ratings.dto';
+import { validateDto } from '../common/http/validate-dto';
+import { CreateRatingDto } from './ratings.dto';
 import { RatingsService } from './ratings.service';
 
 @Controller()
@@ -13,19 +13,16 @@ export class RatingsController {
   constructor(@Inject(RatingsService) private readonly ratings: RatingsService) {}
 
   @Post('jobs/:id/ratings')
-  calificar(
-    @CurrentUser() usuario: AuthUser,
+  rate(
+    @CurrentUser() user: AuthUser,
     @Param('id', uuidPipe) id: string,
-    @Body(validarDto(CalificacionDto)) dto: CalificacionDto,
+    @Body(validateDto(CreateRatingDto)) dto: CreateRatingDto,
   ) {
-    return this.ratings.calificar(id, usuario.id, dto);
+    return this.ratings.rate(id, user.id, dto);
   }
 
   @Get('ratings/mine')
-  propias(
-    @CurrentUser() usuario: AuthUser,
-    @Query(validarDto(PaginacionDto)) consulta: PaginacionDto,
-  ) {
-    return this.ratings.propias(usuario.id, consulta);
+  listOwn(@CurrentUser() user: AuthUser, @Query(validateDto(PaginationDto)) query: PaginationDto) {
+    return this.ratings.listOwn(user.id, query);
   }
 }
