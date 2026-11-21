@@ -1,36 +1,20 @@
-import { Global, Inject, Injectable, Logger, Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
+import { IdentityModule } from '../identity/identity.module';
 import { PrismaModule } from '../prisma/prisma.module';
-import { PrismaService } from '../prisma/prisma.service';
-import {
-  NOTIFICATIONS,
-  type NotificationsContract,
-  type NotifyInput,
-} from './notifications.contract';
-
-@Injectable()
-export class PersistentNotificationsService implements NotificationsContract {
-  private readonly logger = new Logger(PersistentNotificationsService.name);
-
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
-
-  notify(input: NotifyInput) {
-    return this.notifyMany([input]);
-  }
-
-  async notifyMany(inputs: NotifyInput[]) {
-    if (!inputs.length) return;
-    try {
-      await this.prisma.notification.createMany({ data: inputs });
-    } catch {
-      this.logger.error('No se pudieron guardar las notificaciones');
-    }
-  }
-}
+import { LoggerNotificationMailer, NotificationMailer } from './notification-mailer';
+import { NOTIFICATIONS } from './notifications.contract';
+import { NotificationsController } from './notifications.controller';
+import { NotificationsService } from './notifications.service';
 
 @Global()
 @Module({
-  imports: [PrismaModule],
-  providers: [{ provide: NOTIFICATIONS, useClass: PersistentNotificationsService }],
+  imports: [PrismaModule, IdentityModule],
+  controllers: [NotificationsController],
+  providers: [
+    NotificationsService,
+    { provide: NotificationMailer, useClass: LoggerNotificationMailer },
+    { provide: NOTIFICATIONS, useExisting: NotificationsService },
+  ],
   exports: [NOTIFICATIONS],
 })
 export class NotificationsModule {}
