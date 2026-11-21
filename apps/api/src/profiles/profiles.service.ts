@@ -5,10 +5,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { randomUUID } from 'node:crypto';
 import { Prisma, PublisherKind, type PublisherProfile } from '@prisma/client';
 import { IdentityService } from '../identity/identity.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { EMPTY_REPUTATION, REPUTATION, type ReputationContract } from '../ratings/ratings.contract';
 import type {
   CreatePublisherProfileDto,
   PublisherDetailsDto,
@@ -23,6 +25,7 @@ export class ProfilesService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(IdentityService) private readonly identity: IdentityService,
+    @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
   ) {}
 
   createWithPhoto(
@@ -115,9 +118,20 @@ export class ProfilesService {
       description: profile.description,
       sector: profile.sector,
       isVerified: profile.isVerified,
-      // La reputación llega con HU-007 y HU-028 (Sprint 3); sin calificaciones: "Nuevo en la plataforma".
-      reputation: { average: null, ratingsCount: 0, completedJobs: 0 },
+      // HU-046: sin calificaciones, isNew = true ("Nuevo en la plataforma").
+      reputation: await this.reputation(profile.userId),
     };
+  }
+
+  private async reputation(userId: string) {
+    let ratings: ReputationContract;
+    try {
+      ratings = this.moduleRef.get<ReputationContract>(REPUTATION, { strict: false });
+    } catch {
+      // Solo si el módulo de calificaciones no está cargado; un error de consulta sí se propaga.
+      return EMPTY_REPUTATION;
+    }
+    return ratings.getSummary(userId, 'PUBLISHER');
   }
 
   async getProfileSummary(userId: string) {

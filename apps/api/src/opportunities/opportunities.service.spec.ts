@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import type { ModuleRef } from '@nestjs/core';
 import { describe, expect, it, vi } from 'vitest';
 import type { CatalogsService } from '../catalogs/catalogs.service';
 import type { IdentityService } from '../identity/identity.service';
@@ -95,13 +96,27 @@ const setup = ({ active = true, publisherId = 'p1' as string | null, stored = ro
     getPublisherUserId: vi.fn().mockResolvedValue('u1'),
   };
   const identity = { isAccountActive: vi.fn().mockResolvedValue(active) };
+  const applications = {
+    listForOpportunity: vi.fn().mockResolvedValue([
+      { id: 'a1', status: 'RECEIVED', workerUserId: 'w1' },
+      { id: 'a2', status: 'REJECTED', workerUserId: 'w2' },
+      { id: 'a3', status: 'ACCEPTED', workerUserId: 'w3' },
+    ]),
+    countForOpportunities: vi
+      .fn()
+      .mockResolvedValue(new Map([['o1', { applicants: 3, accepted: 1 }]])),
+  };
+  const moduleRef = { get: vi.fn().mockReturnValue(applications) };
+  const notifications = { notify: vi.fn(), notifyMany: vi.fn().mockResolvedValue(undefined) };
   const service = new OpportunitiesService(
     prisma as unknown as PrismaService,
     catalogs as unknown as CatalogsService,
     profiles as unknown as ProfilesService,
     identity as unknown as IdentityService,
+    moduleRef as unknown as ModuleRef,
+    notifications,
   );
-  return { prisma, catalogs, profiles, service };
+  return { prisma, catalogs, profiles, applications, moduleRef, notifications, service };
 };
 
 const response = (error: unknown) => (error as ConflictException).getResponse();
@@ -491,6 +506,56 @@ describe('OpportunitiesService como contrato de engagements', () => {
         OR: [{ scheduledAt: { gt: NOW } }, { closesAt: { gt: NOW } }],
       },
       data: { status: 'ACTIVE', statusReason: null, closedAt: null },
+    });
+  });
+});
+
+describe('OpportunitiesService con postulaciones (RF-03-07, 08, 09)', () => {
+  it('"Mis publicaciones" incluye interesados y aceptados', async () => {
+    const { applications, service } = setup();
+    const result = await service.listMine('u1', {});
+    expect(applications.countForOpportunities).toHaveBeenCalledWith(['o1']);
+    expect(result.items[0]).toMatchObject({ applicantsCount: 3, acceptedCount: 1 });
+  });
+
+  it('sin el módulo de postulaciones cargado, los contadores quedan en cero', async () => {
+    const { moduleRef, service } = setup();
+    moduleRef.get.mockImplementation(() => {
+      throw new Error('no registrado');
+    });
+    const result = await service.listMine('u1', {});
+    expect(result.items[0]).toMatchObject({ applicantsCount: 0, acceptedCount: 0 });
+  });
+
+  it('cambiar el pago avisa a los interesados que siguen en juego, no a los rechazados', async () => {
+    const { notifications, service } = setup();
+    await service.update('u1', 'o1', { paymentCop: 180000 }, NOW);
+    const sent = notifications.notifyMany.mock.calls[0][0];
+    expect(sent.map((n: { userId: string }) => n.userId)).toEqual(['w1', 'w3']);
+    expect(sent[0]).toMatchObject({
+      type: 'OPPORTUNITY_UPDATED',
+      body: `"${task.title}"`,
+      link: '/mi-actividad',
+    });
+  });
+
+  it('cambiar solo la descripción no avisa a nadie', async () => {
+    const { notifications, service } = setup();
+    await service.update(
+      'u1',
+      'o1',
+      { description: 'Pintar una sala comedor amplia, incluye pintura y materiales.' },
+      NOW,
+    );
+    expect(notifications.notifyMany).not.toHaveBeenCalled();
+  });
+
+  it('cancelar avisa a los interesados', async () => {
+    const { notifications, service } = setup();
+    await service.cancel('u1', 'o1', 'Ya no lo necesito');
+    expect(notifications.notifyMany.mock.calls[0][0][0]).toMatchObject({
+      type: 'OPPORTUNITY_CANCELLED',
+      userId: 'w1',
     });
   });
 });

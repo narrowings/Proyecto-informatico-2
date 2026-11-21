@@ -5,11 +5,23 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { OpportunityStatus, OpportunityType, Prisma, type Opportunity } from '@prisma/client';
+import {
+  APPLICATIONS,
+  type ApplicantSummary,
+  type ApplicationsContract,
+} from '../applications/applications.contract';
 import { CatalogsService } from '../catalogs/catalogs.service';
 import { validationPipe } from '../common/validation';
 import { IdentityService } from '../identity/identity.service';
+import {
+  NOTIFICATIONS,
+  type NotificationsContract,
+  type NotifyInput,
+} from '../notifications/notifications.contract';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProfilesService } from '../profiles/profiles.service';
 import { CreateOpportunityDto } from './dto/create-opportunity.dto';
@@ -60,6 +72,9 @@ export class OpportunitiesService implements OpportunitiesContract {
     @Inject(CatalogsService) private readonly catalogs: CatalogsService,
     @Inject(ProfilesService) private readonly profiles: ProfilesService,
     @Inject(IdentityService) private readonly identity: IdentityService,
+    // applications depende de opportunities: se resuelve al usarlo para no crear un ciclo.
+    @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
+    @Optional() @Inject(NOTIFICATIONS) private readonly notifications?: NotificationsContract,
   ) {}
 
   // ─── Publicar (HU-025, HU-003, HU-024) ─────────────────────────────────────
@@ -118,6 +133,20 @@ export class OpportunitiesService implements OpportunitiesContract {
       },
       include: cardInclude,
     });
+    // RF-03-08: si cambia el pago, la fecha o la cantidad de personas, se avisa a los interesados.
+    if (
+      current.paymentCop !== updated.paymentCop ||
+      current.peopleNeeded !== updated.peopleNeeded ||
+      current.scheduledAt?.getTime() !== updated.scheduledAt?.getTime() ||
+      current.salaryMinCop !== updated.salaryMinCop ||
+      current.salaryMaxCop !== updated.salaryMaxCop ||
+      current.closesAt?.getTime() !== updated.closesAt?.getTime()
+    ) {
+      await this.notifyApplicants(updated, {
+        type: 'OPPORTUNITY_UPDATED',
+        title: 'Cambiaron las condiciones de una oportunidad',
+      });
+    }
     return toOwnerView(updated);
   }
 
@@ -150,12 +179,23 @@ export class OpportunitiesService implements OpportunitiesContract {
     return this.transition(userId, id, [PAUSED], ACTIVE, null);
   }
 
-  close(userId: string, id: string, reason: string) {
-    return this.transition(userId, id, [ACTIVE, PAUSED], CLOSED, reason);
+  // RF-03-09: cerrar o cancelar avisa a interesados y seleccionados.
+  async close(userId: string, id: string, reason: string) {
+    const view = await this.transition(userId, id, [ACTIVE, PAUSED], CLOSED, reason);
+    await this.notifyApplicants(view, {
+      type: 'OPPORTUNITY_CANCELLED',
+      title: 'Una oportunidad en la que te postulaste se cerró',
+    });
+    return view;
   }
 
-  cancel(userId: string, id: string, reason: string) {
-    return this.transition(userId, id, [ACTIVE, PAUSED, CLOSED], CANCELLED, reason);
+  async cancel(userId: string, id: string, reason: string) {
+    const view = await this.transition(userId, id, [ACTIVE, PAUSED, CLOSED], CANCELLED, reason);
+    await this.notifyApplicants(view, {
+      type: 'OPPORTUNITY_CANCELLED',
+      title: 'Una oportunidad en la que te postulaste se canceló',
+    });
+    return view;
   }
 
   // RF-03-10 / RN-16: vence al llegar su fecha de realización o de cierre. Idempotente.
@@ -247,6 +287,35 @@ export class OpportunitiesService implements OpportunitiesContract {
     return toPublicView(row, publishers.get(row.publisherProfileId));
   }
 
+  // Vista pública de varias oportunidades en una consulta (p. ej. "Mis postulaciones").
+  // Incluye las canceladas para que el trabajador vea en qué terminó su postulación.
+  async getPublicByIds(ids: string[]) {
+    const rows = await this.prisma.opportunity.findMany({
+      where: { id: { in: [...new Set(ids)] } },
+      include: cardInclude,
+    });
+    const publishers = await this.profiles.getPublisherCards(
+      rows.map((row) => row.publisherProfileId),
+    );
+    return new Map(
+      rows.map((row) => [row.id, toPublicView(row, publishers.get(row.publisherProfileId))]),
+    );
+  }
+
+  // HU-005 CA3: se puede postular solo a una oportunidad activa cuya fecha no ha pasado.
+  isOpenForApplications(
+    view: {
+      status: OpportunityStatus;
+      type: OpportunityType;
+      scheduledAt: Date | null;
+      closesAt: Date | null;
+    },
+    now = new Date(),
+  ) {
+    const date = isFormalType(view.type) ? view.closesAt : view.scheduledAt;
+    return view.status === ACTIVE && date !== null && date > now;
+  }
+
   // HU-023 CA1: "Mis publicaciones" con todos sus estados.
   async listMine(userId: string, query: PageQuery) {
     const publisherProfileId = await this.profiles.getPublisherIdForUser(userId);
@@ -263,7 +332,20 @@ export class OpportunitiesService implements OpportunitiesContract {
         take: pageSize,
       }),
     ]);
-    return { items: rows.map(toOwnerView), page, pageSize, total };
+    // RF-03-07: contadores de interesados y aceptados.
+    const counts = await this.applicationsContract()?.countForOpportunities(
+      rows.map((row) => row.id),
+    );
+    return {
+      items: rows.map((row) => ({
+        ...toOwnerView(row),
+        applicantsCount: counts?.get(row.id)?.applicants ?? 0,
+        acceptedCount: counts?.get(row.id)?.accepted ?? 0,
+      })),
+      page,
+      pageSize,
+      total,
+    };
   }
 
   async getOwn(userId: string, id: string) {
@@ -325,6 +407,36 @@ export class OpportunitiesService implements OpportunitiesContract {
   }
 
   // ─── Internos ──────────────────────────────────────────────────────────────
+
+  // null si el módulo de postulaciones no está cargado (p. ej. pruebas del módulo solo).
+  private applicationsContract() {
+    try {
+      return this.moduleRef.get<ApplicationsContract>(APPLICATIONS, { strict: false });
+    } catch {
+      return null;
+    }
+  }
+
+  // Avisa a quienes siguen en juego: no a rechazados ni a quienes se retiraron.
+  private async notifyApplicants(
+    opportunity: { id: string; title: string },
+    event: Pick<NotifyInput, 'type' | 'title'>,
+  ) {
+    const applications = this.applicationsContract();
+    if (!applications || !this.notifications) return;
+    const applicants: ApplicantSummary[] = await applications.listForOpportunity(opportunity.id);
+    await this.notifications.notifyMany(
+      applicants
+        .filter((applicant) => applicant.status !== 'REJECTED')
+        .map((applicant) => ({
+          ...event,
+          userId: applicant.workerUserId,
+          body: `"${opportunity.title}"`.slice(0, 500),
+          link: '/mi-actividad',
+          data: { opportunityId: opportunity.id },
+        })),
+    );
+  }
 
   private async requirePublisher(userId: string) {
     if (!(await this.identity.isAccountActive(userId))) {

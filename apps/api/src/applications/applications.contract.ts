@@ -19,7 +19,8 @@ export type ApplicationWithParties = {
 export type ApplicantSummary = ApplicationWithParties & {
   worker: {
     displayName: string;
-    photoUrl: string;
+    // null si el trabajador eligió no mostrar su foto (HU-030 CA4).
+    photoUrl: string | null;
     availability: 'AVAILABLE' | 'UNAVAILABLE';
     zone: { id: number; name: string };
     skills: string[];
@@ -39,6 +40,12 @@ export interface ApplicationsContract {
   listIdsForWorkerUser(
     userId: string,
   ): Promise<{ workerProfileId: string | null; applicationIds: string[] }>;
+
+  // RF-03-07: contadores de "Mis publicaciones". applicants no cuenta las retiradas; accepted son
+  // las personas que aceptaron la selección o fueron aceptadas en la vacante.
+  countForOpportunities(
+    opportunityIds: string[],
+  ): Promise<Map<string, { applicants: number; accepted: number }>>;
 
   // engagements marca ACCEPTED cuando el trabajador acepta la selección y REJECTED a los no
   // seleccionados al llenarse los cupos (RF-05-09). No notifica: eso lo hace quien llama.

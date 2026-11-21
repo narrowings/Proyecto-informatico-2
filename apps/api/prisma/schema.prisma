@@ -173,16 +173,19 @@ enum WorkerAvailability {
 }
 
 model WorkerProfile {
-  id           String             @id @default(uuid()) @db.Uuid
-  userId       String             @unique @map("user_id") @db.Uuid
-  displayName  String             @map("display_name") @db.VarChar(120)
-  photoUrl     String             @map("photo_url") @db.VarChar(500)
-  skills       String[]
-  experience   String?            @db.VarChar(2000)
-  zoneId       Int                @map("zone_id")
-  availability WorkerAvailability @default(AVAILABLE)
-  createdAt    DateTime           @default(now()) @map("created_at")
-  updatedAt    DateTime           @updatedAt @map("updated_at")
+  id             String             @id @default(uuid()) @db.Uuid
+  userId         String             @unique @map("user_id") @db.Uuid
+  displayName    String             @map("display_name") @db.VarChar(120)
+  photoUrl       String             @map("photo_url") @db.VarChar(500)
+  skills         String[]
+  experience     String?            @db.VarChar(2000)
+  zoneId         Int                @map("zone_id")
+  availability   WorkerAvailability @default(AVAILABLE)
+  // HU-030 CA4: el trabajador elige si su perfil público muestra la foto y la experiencia.
+  showPhoto      Boolean            @default(true) @map("show_photo")
+  showExperience Boolean            @default(true) @map("show_experience")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
 
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   zone       Zone       @relation(fields: [zoneId], references: [id])
