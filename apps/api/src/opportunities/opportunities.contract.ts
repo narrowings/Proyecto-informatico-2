@@ -4,6 +4,9 @@ import type { OpportunityStatus, OpportunityType } from '@prisma/client';
 // engagements (HU-006, HU-028) programa contra esta interfaz; OpportunitiesService la implementa.
 // Cambiarla exige acordarlo en el PR de ambos módulos (docs/backend/modulos-y-contratos.md).
 
+// Token de inyección: @Inject(OPPORTUNITIES) private readonly x: OpportunitiesContract.
+export const OPPORTUNITIES = Symbol('OPPORTUNITIES');
+
 export type OpportunityForEngagement = {
   id: string;
   type: OpportunityType;

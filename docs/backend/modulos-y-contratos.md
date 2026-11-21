@@ -19,8 +19,8 @@ servicio a través del contrato publicado en `apps/api/src/<módulo>/<módulo>.c
 
 ## Contratos
 
-- `opportunities/opportunities.contract.ts`: `getForEngagement`, `markFilled`, `reopenIfFilled`.
-- `applications/applications.contract.ts`: `getWithParties`, `listForOpportunity`, `setStatus`.
+- `opportunities/opportunities.contract.ts`: token `OPPORTUNITIES` con `getForEngagement`, `markFilled`, `reopenIfFilled`.
+- `applications/applications.contract.ts`: token `APPLICATIONS` con `getWithParties`, `listForOpportunity`, `setStatus`.
 - `notifications/notifications.contract.ts`: token `NOTIFICATIONS` con `notify` y `notifyMany`.
 
 Quien consume un contrato lo prueba con un doble (mock) de la interfaz. Quien lo implementa

@@ -3,6 +3,9 @@ import type { ApplicationStatus } from '@prisma/client';
 // Contrato que el módulo applications (HU-005, HU-024 CA2) ofrece a los demás módulos.
 // engagements (HU-006) programa contra esta interfaz; ApplicationsService la implementa.
 
+// Token de inyección: @Inject(APPLICATIONS) private readonly x: ApplicationsContract.
+export const APPLICATIONS = Symbol('APPLICATIONS');
+
 export type ApplicationWithParties = {
   id: string;
   status: ApplicationStatus;
