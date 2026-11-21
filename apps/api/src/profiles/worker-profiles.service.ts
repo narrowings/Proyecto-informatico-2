@@ -203,10 +203,25 @@ export class WorkerProfilesService {
     );
   }
 
-  async getPhoto(profileId: string) {
-    const photo = await this.prisma.workerPhoto.findUnique({ where: { profileId } });
+  // HU-030 CA4: si el trabajador ocultó su foto, la URL pública responde 404 igual que si no
+  // existiera; solo el dueño la sigue viendo. requesterId es el usuario de la sesión, si hay.
+  async getPhoto(profileId: string, requesterId?: string) {
+    const profile = await this.prisma.workerProfile.findUnique({
+      where: { id: profileId },
+      select: { userId: true, showPhoto: true },
+    });
+    const photo =
+      profile && (profile.showPhoto || profile.userId === requesterId)
+        ? await this.prisma.workerPhoto.findUnique({ where: { profileId } })
+        : null;
     if (!photo) throw new NotFoundException('Foto no encontrada');
     return photo;
+  }
+
+  async getOwnPhoto(userId: string) {
+    const profileId = await this.getIdForUser(userId);
+    if (!profileId) throw new NotFoundException('Foto no encontrada');
+    return this.getPhoto(profileId, userId);
   }
 
   private async reputation(userId: string) {

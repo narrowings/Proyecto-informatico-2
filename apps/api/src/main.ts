@@ -2,12 +2,14 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+import { applySecurityHeaders } from './common/http/security-headers';
 import { applyTrustProxy } from './common/http/trust-proxy';
 import { validationPipe } from './common/validation';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   applyTrustProxy(app);
+  applySecurityHeaders(app);
   app.enableCors({
     origin: new URL(process.env.WEB_URL ?? 'http://localhost:3000').origin,
     credentials: true,

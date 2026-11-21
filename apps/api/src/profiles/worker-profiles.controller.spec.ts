@@ -1,4 +1,4 @@
-import { type INestApplication, Module } from '@nestjs/common';
+import { type INestApplication, Module, NotFoundException } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { NextFunction, Request, Response } from 'express';
@@ -27,6 +27,7 @@ describe('WorkerProfilesController y CatalogsController (HTTP)', () => {
     create: vi.fn().mockResolvedValue({ id: 'w1' }),
     getOwn: vi.fn().mockResolvedValue({ id: 'w1' }),
     getPhoto: vi.fn(),
+    getOwnPhoto: vi.fn(),
   };
   const catalogs = {
     listZones: vi.fn().mockResolvedValue([{ id: 2, name: 'Sur' }]),
@@ -126,7 +127,32 @@ describe('WorkerProfilesController y CatalogsController (HTTP)', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toBe('image/png');
     expect(response.headers.get('x-content-type-options')).toBe('nosniff');
-    expect(workers.getPhoto).toHaveBeenCalledWith(id);
+    // Sin sesión no hay usuario: el servicio decide si la foto está oculta (HU-030 CA4).
+    expect(workers.getPhoto).toHaveBeenCalledWith(id, undefined);
+  });
+
+  it('con sesión, la foto pública se pide con el usuario para que el dueño vea la suya oculta', async () => {
+    workers.getPhoto.mockResolvedValue({ content: PNG, mediaType: 'image/png' });
+    const id = '6f1c1f5e-3a1b-4b5e-9d0e-1c2b3a4d5e6f';
+    await fetch(`${url}/profiles/worker/${id}/photo`, { headers: { 'x-test-user': 'u1' } });
+    expect(workers.getPhoto).toHaveBeenCalledWith(id, 'u1');
+  });
+
+  it('una foto oculta responde 404 por su URL pública', async () => {
+    workers.getPhoto.mockRejectedValue(new NotFoundException('Foto no encontrada'));
+    const id = '6f1c1f5e-3a1b-4b5e-9d0e-1c2b3a4d5e6f';
+    expect((await fetch(`${url}/profiles/worker/${id}/photo`)).status).toBe(404);
+  });
+
+  it('"me/photo" exige sesión, devuelve la foto propia y no se guarda en caché', async () => {
+    workers.getOwnPhoto.mockResolvedValue({ content: PNG, mediaType: 'image/png' });
+    expect((await fetch(`${url}/profiles/worker/me/photo`)).status).toBe(401);
+    const response = await fetch(`${url}/profiles/worker/me/photo`, {
+      headers: { 'x-test-user': 'u1' },
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(workers.getOwnPhoto).toHaveBeenCalledWith('u1');
   });
 
   it('un id de foto que no es UUID responde 400 sin consultar la base', async () => {
