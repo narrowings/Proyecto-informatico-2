@@ -1,6 +1,7 @@
 import {
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -20,8 +21,8 @@ const duplicateProfile = () =>
 @Injectable()
 export class ProfilesService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly identity: IdentityService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(IdentityService) private readonly identity: IdentityService,
   ) {}
 
   createWithPhoto(
@@ -136,6 +137,33 @@ export class ProfilesService {
   async hasPublisherProfile(userId: string) {
     const count = await this.prisma.publisherProfile.count({ where: { userId } });
     return count > 0;
+  }
+
+  // RF-02-04: opportunities exige perfil de publicador antes de publicar y guarda su id.
+  async getPublisherIdForUser(userId: string) {
+    const profile = await this.prisma.publisherProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    return profile?.id ?? null;
+  }
+
+  // Datos públicos del publicador para tarjetas y detalle de oportunidades (RF-02-07: sin contacto).
+  async getPublisherCards(ids: string[]) {
+    const profiles = await this.prisma.publisherProfile.findMany({
+      where: { id: { in: [...new Set(ids)] } },
+      select: { id: true, kind: true, displayName: true, photoUrl: true, isVerified: true },
+    });
+    return new Map(profiles.map((profile) => [profile.id, profile]));
+  }
+
+  // Para el contrato de engagements: a quién pertenece un perfil de publicador.
+  async getPublisherUserId(profileId: string) {
+    const profile = await this.prisma.publisherProfile.findUnique({
+      where: { id: profileId },
+      select: { userId: true },
+    });
+    return profile?.userId ?? null;
   }
 }
 
