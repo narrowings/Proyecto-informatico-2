@@ -1,11 +1,12 @@
-import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
-import { AccountStatus } from '@prisma/client';
+import { ForbiddenException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { AccountStatus, type Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { randomUUID } from 'node:crypto';
 import { ProfilesService } from '../profiles/profiles.service';
 import { IdentityService } from '../identity/identity.service';
 import { createToken, hashToken } from '../identity/tokens';
 import { PrismaService } from '../prisma/prisma.service';
+import { transaccionSerializable } from '../prisma/transaccion-serializable';
 import { AccessTokenService } from './access-token.service';
 import type { LoginDto } from './dto/login.dto';
 import {
@@ -26,10 +27,10 @@ export class SessionService {
   private dummyHash?: Promise<string>;
 
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly accessTokens: AccessTokenService,
-    private readonly identity: IdentityService,
-    private readonly profiles: ProfilesService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(AccessTokenService) private readonly accessTokens: AccessTokenService,
+    @Inject(IdentityService) private readonly identity: IdentityService,
+    @Inject(ProfilesService) private readonly profiles: ProfilesService,
   ) {}
 
   // HU-021 CA1, CA2 y CA4.
@@ -52,15 +53,20 @@ export class SessionService {
 
     const requiresTermsAcceptance = await this.identity.requiresTermsAcceptance(user.id);
     const { token: refreshToken, hash: tokenHash } = createToken();
-    await this.prisma.refreshToken.create({
-      data: {
-        userId: user.id,
-        familyId: randomUUID(),
-        tokenHash,
-        expiresAt: new Date(Date.now() + REFRESH_TTL_MS),
-        ip: meta.ip,
-        userAgent: meta.userAgent?.slice(0, 255),
-      },
+    await transaccionSerializable(this.prisma, async (tx) => {
+      // La contraseña pudo cambiar mientras se verificaba el hash.
+      const vigente = await this.identity.tieneCredencialVigente(user.id, hash, tx);
+      if (!vigente) throw new UnauthorizedException(INVALID_CREDENTIALS);
+      await tx.refreshToken.create({
+        data: {
+          userId: user.id,
+          familyId: randomUUID(),
+          tokenHash,
+          expiresAt: new Date(Date.now() + REFRESH_TTL_MS),
+          ip: meta.ip,
+          userAgent: meta.userAgent?.slice(0, 255),
+        },
+      });
     });
     const { token: accessToken, expiresIn } = await this.accessTokens.sign(user.id);
     return {
@@ -94,27 +100,30 @@ export class SessionService {
       throw new UnauthorizedException(SESSION_EXPIRED);
     }
 
-    // Reclama el token con una sola escritura: de dos renovaciones simultáneas gana una.
-    const claimed = await this.prisma.refreshToken.updateMany({
-      where: { id: current.id, rotatedAt: null, revokedAt: null },
-      data: { rotatedAt: now, lastUsedAt: now },
+    const { token: nextToken, hash } = createToken();
+    // Reclamar el token y emitir el siguiente son una sola operación frente a la revocación.
+    const rotado = await transaccionSerializable(this.prisma, async (tx) => {
+      const claimed = await tx.refreshToken.updateMany({
+        where: { id: current.id, rotatedAt: null, revokedAt: null },
+        data: { rotatedAt: now, lastUsedAt: now },
+      });
+      if (!claimed.count) return false;
+      await tx.refreshToken.create({
+        data: {
+          userId: current.userId,
+          familyId: current.familyId,
+          tokenHash: hash,
+          expiresAt: new Date(now.getTime() + REFRESH_TTL_MS),
+          ip: meta.ip,
+          userAgent: meta.userAgent?.slice(0, 255),
+        },
+      });
+      return true;
     });
-    if (claimed.count === 0) {
+    if (!rotado) {
       await this.revokeFamily(current.familyId);
       throw new UnauthorizedException(SESSION_EXPIRED);
     }
-
-    const { token: nextToken, hash } = createToken();
-    await this.prisma.refreshToken.create({
-      data: {
-        userId: current.userId,
-        familyId: current.familyId,
-        tokenHash: hash,
-        expiresAt: new Date(now.getTime() + REFRESH_TTL_MS),
-        ip: meta.ip,
-        userAgent: meta.userAgent?.slice(0, 255),
-      },
-    });
     const { token: accessToken, expiresIn } = await this.accessTokens.sign(current.userId);
     return { accessToken, expiresIn, refreshToken: nextToken };
   }
@@ -143,6 +152,13 @@ export class SessionService {
       email: user.email,
       ...(await this.profiles.getProfileSummary(user.id)),
     };
+  }
+
+  async revokeAllForUser(userId: string, tx: Prisma.TransactionClient = this.prisma) {
+    await tx.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
   }
 
   private async revokeFamily(familyId: string) {

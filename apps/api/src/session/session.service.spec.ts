@@ -37,17 +37,24 @@ const setup = () => {
     },
   };
   const accessTokens = { sign: vi.fn().mockResolvedValue({ token: 'jwt', expiresIn: 900 }) };
+  const identidad = {
+    requiresTermsAcceptance: vi.fn().mockResolvedValue(false),
+    tieneCredencialVigente: vi.fn().mockResolvedValue(true),
+  };
   const service = new SessionService(
-    prisma as unknown as PrismaService,
+    {
+      ...prisma,
+      $transaction: (operacion: (tx: typeof prisma) => unknown) => operacion(prisma),
+    } as unknown as PrismaService,
     accessTokens as unknown as AccessTokenService,
-    { requiresTermsAcceptance: vi.fn().mockResolvedValue(false) } as unknown as IdentityService,
+    identidad as unknown as IdentityService,
     {
       getProfileSummary: vi
         .fn()
         .mockResolvedValue({ hasWorkerProfile: false, hasPublisherProfile: false }),
     } as unknown as ProfilesService,
   );
-  return { prisma, accessTokens, service };
+  return { prisma, accessTokens, service, identidad };
 };
 
 const rejection = (promise: Promise<unknown>) =>
@@ -77,6 +84,17 @@ describe('SessionService.login', () => {
     expect(data.tokenHash).not.toBe(result.refreshToken);
     expect(data).toMatchObject({ userId: 'u1', ip: '10.0.0.1', userAgent: 'vitest' });
     expect(data.expiresAt.getTime()).toBeGreaterThan(Date.now() + REFRESH_TTL_MS - 60_000);
+  });
+
+  it('HU-018: un inicio simultáneo con la contraseña anterior no crea otra sesión', async () => {
+    const { prisma, service, identidad } = setup();
+    prisma.user.findUnique.mockResolvedValue(userWith('ACTIVE'));
+    identidad.tieneCredencialVigente.mockResolvedValue(false);
+
+    await expect(service.login(dto, meta)).rejects.toMatchObject({
+      response: { code: 'INVALID_CREDENTIALS' },
+    });
+    expect(prisma.refreshToken.create).not.toHaveBeenCalled();
   });
 
   it('HU-021 CA2: una contraseña incorrecta responde el mensaje genérico', async () => {
