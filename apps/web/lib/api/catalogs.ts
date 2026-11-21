@@ -1,8 +1,8 @@
-/** Catálogos de zonas de Cali y categorías (T-03). Contrato provisional. */
+/** Catálogos de zonas de Cali y categorías (T-03): `GET /v1/zones` y `GET /v1/categories`. */
 
 export type Zone = { id: number; name: string };
 
-export type Category = { id: number; name: string; description?: string };
+export type Category = { id: number; name: string; description?: string | null };
 
 export type CatalogsApi = {
   /** Solo zonas activas. */
