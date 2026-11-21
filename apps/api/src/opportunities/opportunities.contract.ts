@@ -31,6 +31,10 @@ export interface OpportunitiesContract {
   // Idempotente: si ya está cerrada no hace nada.
   markFilled(opportunityId: string): Promise<void>;
 
+  // Ids de todas las oportunidades del usuario como publicador (cualquier estado), para que
+  // engagements filtre "Mis trabajos" en la base sin recorrer los de otros usuarios.
+  listIdsForPublisherUser(userId: string): Promise<string[]>;
+
   // RF-05-08: si se libera un cupo (rechazo, vencimiento o cancelación) y la oportunidad se
   // cerró solo por estar llena, vuelve a ACTIVE si su fecha no ha pasado. Idempotente.
   reopenIfFilled(opportunityId: string): Promise<void>;
