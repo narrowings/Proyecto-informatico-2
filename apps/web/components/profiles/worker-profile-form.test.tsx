@@ -6,7 +6,6 @@ import { WorkerProfileForm } from './worker-profile-form';
 
 const replace = vi.fn();
 const getCurrentUser = vi.fn();
-const uploadProfilePhoto = vi.fn();
 const createWorkerProfile = vi.fn();
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace }) }));
@@ -23,7 +22,6 @@ vi.mock('@/lib/api', () => ({
     ],
   },
   profilesApi: {
-    uploadProfilePhoto: (...args: unknown[]) => uploadProfilePhoto(...args),
     createWorkerProfile: (...args: unknown[]) => createWorkerProfile(...args),
   },
 }));
@@ -42,7 +40,6 @@ async function renderForm(props?: { fromWork?: boolean }) {
 beforeEach(() => {
   replace.mockReset();
   getCurrentUser.mockReset().mockResolvedValue(ana);
-  uploadProfilePhoto.mockReset().mockResolvedValue({ url: 'https://media.test/ana.png' });
   createWorkerProfile.mockReset();
 });
 
@@ -88,10 +85,9 @@ describe('WorkerProfileForm', () => {
     await user.click(submit());
 
     expect(await screen.findByRole('status')).toHaveTextContent('Estado: Disponible');
-    expect(uploadProfilePhoto).toHaveBeenCalledWith(expect.objectContaining({ name: 'ana.png' }));
     expect(createWorkerProfile).toHaveBeenCalledWith({
       displayName: 'Ana Pérez',
-      photoUrl: 'https://media.test/ana.png',
+      photo: expect.objectContaining({ name: 'ana.png' }),
       skills: ['Logística', 'edición de video'],
       experience: 'Dos años en trasteos.',
       zoneId: 2,
