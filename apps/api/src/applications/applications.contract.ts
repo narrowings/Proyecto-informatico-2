@@ -1,0 +1,36 @@
+import type { ApplicationStatus } from '@prisma/client';
+
+// Contrato que el módulo applications (HU-005, HU-024 CA2) ofrece a los demás módulos.
+// engagements (HU-006) programa contra esta interfaz; ApplicationsService la implementa.
+
+export type ApplicationWithParties = {
+  id: string;
+  status: ApplicationStatus;
+  opportunityId: string;
+  workerProfileId: string;
+  workerUserId: string;
+  createdAt: Date;
+};
+
+// RF-05-06: lo que ve el publicador de cada interesado. Sin correo ni teléfono (RF-02-07).
+export type ApplicantSummary = ApplicationWithParties & {
+  worker: {
+    displayName: string;
+    photoUrl: string;
+    availability: 'AVAILABLE' | 'UNAVAILABLE';
+    zone: { id: number; name: string };
+    skills: string[];
+  };
+};
+
+export interface ApplicationsContract {
+  // null si no existe.
+  getWithParties(applicationId: string): Promise<ApplicationWithParties | null>;
+
+  // Interesados de una oportunidad, del más antiguo al más reciente. No incluye WITHDRAWN.
+  listForOpportunity(opportunityId: string): Promise<ApplicantSummary[]>;
+
+  // engagements marca ACCEPTED cuando el trabajador acepta la selección y REJECTED a los no
+  // seleccionados al llenarse los cupos (RF-05-09). No notifica: eso lo hace quien llama.
+  setStatus(applicationId: string, status: ApplicationStatus): Promise<void>;
+}
