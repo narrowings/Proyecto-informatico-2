@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import type { ModuleRef } from '@nestjs/core';
 import { Prisma } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { validationPipe } from '../common/validation';
@@ -50,11 +51,14 @@ const setup = () => {
     },
   };
   const identity = { isAccountActive: vi.fn().mockResolvedValue(true) };
+  const ratings = { getSummary: vi.fn() };
+  const moduleRef = { get: vi.fn().mockReturnValue(ratings) };
   const service = new ProfilesService(
     prisma as unknown as PrismaService,
     identity as unknown as IdentityService,
+    moduleRef as unknown as ModuleRef,
   );
-  return { prisma, identity, service };
+  return { prisma, identity, ratings, moduleRef, service };
 };
 
 describe('ProfilesService.createPublisherProfile', () => {
@@ -112,8 +116,10 @@ describe('ProfilesService.createPublisherProfile', () => {
 
 describe('ProfilesService.getPublicPublisherProfile', () => {
   it('HU-008 CA3: no expone NIT, contacto ni el usuario dueño', async () => {
-    const { prisma, service } = setup();
+    const { prisma, ratings, service } = setup();
     prisma.publisherProfile.findUnique.mockResolvedValue(stored());
+    const summary = { average: 4.25, ratingsCount: 4, completedJobs: 5, isNew: false };
+    ratings.getSummary.mockResolvedValue(summary);
 
     const result = await service.getPublicPublisherProfile('p1');
 
@@ -121,7 +127,19 @@ describe('ProfilesService.getPublicPublisherProfile', () => {
     expect(result).not.toHaveProperty('contactName');
     expect(result).not.toHaveProperty('userId');
     expect(result).toMatchObject({ displayName: company.displayName, isVerified: false });
-    expect(result.reputation).toEqual({ average: null, ratingsCount: 0, completedJobs: 0 });
+    // HU-046: la reputación del publicador como tal (rol PUBLISHER).
+    expect(result.reputation).toEqual(summary);
+    expect(ratings.getSummary).toHaveBeenCalledWith('u1', 'PUBLISHER');
+  });
+
+  it('sin el módulo de calificaciones cargado muestra "Nuevo en la plataforma"', async () => {
+    const { prisma, moduleRef, service } = setup();
+    prisma.publisherProfile.findUnique.mockResolvedValue(stored());
+    moduleRef.get.mockImplementation(() => {
+      throw new Error('no registrado');
+    });
+    const result = await service.getPublicPublisherProfile('p1');
+    expect(result.reputation).toMatchObject({ isNew: true, ratingsCount: 0, average: null });
   });
 
   it('responde 404 si el perfil no existe', async () => {

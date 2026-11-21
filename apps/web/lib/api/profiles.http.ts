@@ -1,10 +1,31 @@
 import { z } from 'zod';
 import { ApiError, API_ORIGIN, authenticated, request } from './http';
-import type { ProfilesApi, PublicPublisherProfile } from './profiles';
-import { workerProfilesApi } from './profiles.mock';
+import type { ProfilesApi, PublicPublisherProfile, WorkerProfile } from './profiles';
 
 export const profilesApi: ProfilesApi = {
-  ...workerProfilesApi,
+  async createWorkerProfile({ photo, ...details }) {
+    const body = new FormData();
+    body.set('photo', photo);
+    body.set('displayName', details.displayName);
+    body.set('skills', JSON.stringify(details.skills));
+    if (details.experience) body.set('experience', details.experience);
+    body.set('zoneId', String(details.zoneId));
+    body.set('categoryIds', JSON.stringify(details.categoryIds));
+    try {
+      const profile = await authenticated<WorkerProfile>('/profiles/worker', {
+        method: 'POST',
+        body,
+      });
+      return {
+        ok: true,
+        profile: { ...profile, photoUrl: new URL(profile.photoUrl, API_ORIGIN).href },
+      };
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409)
+        return { ok: false, reason: 'already_exists' };
+      throw error;
+    }
+  },
   async createPublisherProfile({ photo, ...details }) {
     const body = new FormData();
     body.set('photo', photo);

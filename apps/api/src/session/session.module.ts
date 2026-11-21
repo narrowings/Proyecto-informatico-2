@@ -10,7 +10,7 @@ import { SessionService } from './session.service';
   imports: [IdentityModule, ProfilesModule],
   controllers: [SessionController],
   providers: [SessionService, AccessTokenService, AccessTokenMiddleware],
-  exports: [AccessTokenService],
+  exports: [AccessTokenService, SessionService],
 })
 export class SessionModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

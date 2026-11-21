@@ -1,13 +1,16 @@
 import {
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { randomUUID } from 'node:crypto';
 import { Prisma, PublisherKind, type PublisherProfile } from '@prisma/client';
 import { IdentityService } from '../identity/identity.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { EMPTY_REPUTATION, REPUTATION, type ReputationContract } from '../ratings/ratings.contract';
 import type {
   CreatePublisherProfileDto,
   PublisherDetailsDto,
@@ -20,8 +23,9 @@ const duplicateProfile = () =>
 @Injectable()
 export class ProfilesService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly identity: IdentityService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(IdentityService) private readonly identity: IdentityService,
+    @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
   ) {}
 
   createWithPhoto(
@@ -114,9 +118,20 @@ export class ProfilesService {
       description: profile.description,
       sector: profile.sector,
       isVerified: profile.isVerified,
-      // La reputación llega con HU-007 y HU-028 (Sprint 3); sin calificaciones: "Nuevo en la plataforma".
-      reputation: { average: null, ratingsCount: 0, completedJobs: 0 },
+      // HU-046: sin calificaciones, isNew = true ("Nuevo en la plataforma").
+      reputation: await this.reputation(profile.userId),
     };
+  }
+
+  private async reputation(userId: string) {
+    let ratings: ReputationContract;
+    try {
+      ratings = this.moduleRef.get<ReputationContract>(REPUTATION, { strict: false });
+    } catch {
+      // Solo si el módulo de calificaciones no está cargado; un error de consulta sí se propaga.
+      return EMPTY_REPUTATION;
+    }
+    return ratings.getSummary(userId, 'PUBLISHER');
   }
 
   async getProfileSummary(userId: string) {
@@ -136,6 +151,33 @@ export class ProfilesService {
   async hasPublisherProfile(userId: string) {
     const count = await this.prisma.publisherProfile.count({ where: { userId } });
     return count > 0;
+  }
+
+  // RF-02-04: opportunities exige perfil de publicador antes de publicar y guarda su id.
+  async getPublisherIdForUser(userId: string) {
+    const profile = await this.prisma.publisherProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    return profile?.id ?? null;
+  }
+
+  // Datos públicos del publicador para tarjetas y detalle de oportunidades (RF-02-07: sin contacto).
+  async getPublisherCards(ids: string[]) {
+    const profiles = await this.prisma.publisherProfile.findMany({
+      where: { id: { in: [...new Set(ids)] } },
+      select: { id: true, kind: true, displayName: true, photoUrl: true, isVerified: true },
+    });
+    return new Map(profiles.map((profile) => [profile.id, profile]));
+  }
+
+  // Para el contrato de engagements: a quién pertenece un perfil de publicador.
+  async getPublisherUserId(profileId: string) {
+    const profile = await this.prisma.publisherProfile.findUnique({
+      where: { id: profileId },
+      select: { userId: true },
+    });
+    return profile?.userId ?? null;
   }
 }
 
