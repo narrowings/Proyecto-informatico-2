@@ -314,6 +314,9 @@ model Opportunity {
   // aceptaron la selección de esta oportunidad. Nunca va en respuestas públicas.
   exactAddress String? @map("exact_address") @db.VarChar(300)
 
+  // RF-04-08: título, descripción y categoría en minúsculas y sin tildes; lo mantiene OpportunitiesService.
+  searchText String @default("") @map("search_text") @db.Text
+
   statusReason String?   @map("status_reason") @db.VarChar(500) // HU-023 CA3: motivo al pausar, cerrar o cancelar
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
