@@ -295,6 +295,16 @@ export class OpportunitiesService implements OpportunitiesContract {
     };
   }
 
+  async listIdsForPublisherUser(userId: string) {
+    const publisherProfileId = await this.profiles.getPublisherIdForUser(userId);
+    if (!publisherProfileId) return [];
+    const rows = await this.prisma.opportunity.findMany({
+      where: { publisherProfileId },
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
+  }
+
   async markFilled(id: string, now = new Date()) {
     await this.prisma.opportunity.updateMany({
       where: { id, status: ACTIVE },

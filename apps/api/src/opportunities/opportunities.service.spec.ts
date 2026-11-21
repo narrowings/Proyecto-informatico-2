@@ -456,6 +456,19 @@ describe('OpportunitiesService como contrato de engagements', () => {
     });
   });
 
+  it('listIdsForPublisherUser filtra por el perfil del usuario y sin perfil devuelve []', async () => {
+    const { prisma, service } = setup();
+    prisma.opportunity.findMany.mockResolvedValueOnce([{ id: 'o1' }, { id: 'o2' }]);
+    expect(await service.listIdsForPublisherUser('u1')).toEqual(['o1', 'o2']);
+    expect(prisma.opportunity.findMany).toHaveBeenLastCalledWith({
+      where: { publisherProfileId: 'p1' },
+      select: { id: true },
+    });
+    const none = setup({ publisherId: null });
+    expect(await none.service.listIdsForPublisherUser('u9')).toEqual([]);
+    expect(none.prisma.opportunity.findMany).not.toHaveBeenCalled();
+  });
+
   it('getForEngagement de una oportunidad inexistente es null', async () => {
     const { prisma, service } = setup();
     prisma.opportunity.findUnique.mockResolvedValueOnce(null);
