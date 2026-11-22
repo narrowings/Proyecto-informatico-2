@@ -61,6 +61,16 @@ export class WorkerProfilesController {
     return this.workers.replacePhoto(user.id, photo);
   }
 
+  // Foto propia aunque esté oculta, para la pantalla de "Mi perfil" (se pide con el token).
+  @Get('me/photo')
+  @UseGuards(AuthenticatedGuard)
+  @Header('X-Content-Type-Options', 'nosniff')
+  @Header('Cache-Control', 'private, no-store')
+  async ownPhoto(@CurrentUser() user: AuthUser) {
+    const photo = await this.workers.getOwnPhoto(user.id);
+    return new StreamableFile(photo.content, { type: photo.mediaType });
+  }
+
   // HU-029: perfil público del trabajador. Va después de "me" para que no se lea como id.
   @Get(':id')
   publicProfile(@Param('id', ParseUUIDPipe) id: string) {
@@ -70,8 +80,9 @@ export class WorkerProfilesController {
   // Pública: la foto se muestra en tarjetas y perfiles. nosniff evita que se interprete como HTML.
   @Get(':id/photo')
   @Header('X-Content-Type-Options', 'nosniff')
-  async photo(@Param('id', ParseUUIDPipe) id: string) {
-    const photo = await this.workers.getPhoto(id);
+  async photo(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user?: AuthUser) {
+    // Pública; con sesión, el dueño también ve su foto oculta.
+    const photo = await this.workers.getPhoto(id, user?.id);
     return new StreamableFile(photo.content, { type: photo.mediaType });
   }
 }

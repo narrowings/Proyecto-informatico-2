@@ -240,3 +240,34 @@ describe('WorkerProfilesService edición y perfil público (HU-032, HU-029, HU-0
     await expect(setup().service.getPublic('x')).rejects.toBeInstanceOf(NotFoundException);
   });
 });
+
+describe('WorkerProfilesService.getPhoto (auditoría: foto oculta, HU-030 CA4)', () => {
+  const withPhoto = (showPhoto: boolean) => {
+    const ctx = setup();
+    ctx.prisma.workerProfile.findUnique.mockResolvedValue({ userId: 'u1', showPhoto });
+    ctx.prisma.workerPhoto.findUnique.mockResolvedValue({
+      content: Buffer.from('x'),
+      mediaType: 'image/png',
+    });
+    return ctx;
+  };
+
+  it('foto visible: cualquiera la obtiene', async () => {
+    await expect(withPhoto(true).service.getPhoto('w1')).resolves.toMatchObject({
+      mediaType: 'image/png',
+    });
+  });
+
+  it('foto oculta: 404 para visitantes y otros usuarios, sin leer el archivo', async () => {
+    const { prisma, service } = withPhoto(false);
+    await expect(service.getPhoto('w1')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.getPhoto('w1', 'otro')).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.workerPhoto.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('foto oculta: el dueño la sigue viendo', async () => {
+    await expect(withPhoto(false).service.getPhoto('w1', 'u1')).resolves.toMatchObject({
+      mediaType: 'image/png',
+    });
+  });
+});

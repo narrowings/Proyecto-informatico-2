@@ -243,3 +243,24 @@ describe('IdentityService.currentLegalDocuments', () => {
     await expect(service.currentLegalDocuments()).rejects.toThrow(/seed/);
   });
 });
+
+describe('HU-014 Destinatarios de las notificaciones', () => {
+  it('consulta únicamente el nombre y correo de una cuenta activa', async () => {
+    const { prisma, service } = setup();
+    const recipient = { name: 'Ana', email: 'ana@example.com' };
+    prisma.user.findUnique.mockResolvedValue(recipient);
+
+    await expect(service.getNotificationRecipient('u1')).resolves.toEqual(recipient);
+    expect(prisma.user.findUnique).toHaveBeenCalledExactlyOnceWith({
+      where: { id: 'u1', status: 'ACTIVE' },
+      select: { name: true, email: true },
+    });
+  });
+
+  it('devuelve nulo si no hay una cuenta activa para ese usuario', async () => {
+    const { prisma, service } = setup();
+    prisma.user.findUnique.mockResolvedValue(null);
+
+    await expect(service.getNotificationRecipient('u1')).resolves.toBeNull();
+  });
+});
