@@ -11,3 +11,6 @@ test-results/
 .env.*
 !.env.example
 .DS_Store
+
+# Temporales de Office (p. ej. ~$documento.docx)
+~$*
