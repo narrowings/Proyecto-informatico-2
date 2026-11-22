@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { rateLimitOptions } from './common/http/rate-limit';
+import { CatalogsModule } from './catalogs/catalogs.module';
 import { HealthModule } from './health/health.module';
 import { IdentityModule } from './identity/identity.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -13,6 +14,7 @@ import { SessionModule } from './session/session.module';
     ThrottlerModule.forRoot(rateLimitOptions),
     PrismaModule,
     HealthModule,
+    CatalogsModule,
     SessionModule,
     IdentityModule,
     ProfilesModule,

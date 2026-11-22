@@ -166,7 +166,19 @@ model WorkerProfile {
   zone       Zone       @relation(fields: [zoneId], references: [id])
   categories Category[] @relation("worker_profile_categories") // HU-002: categorías de interés
 
+  photo WorkerPhoto?
+
   @@map("worker_profiles")
+}
+
+// Igual que PublisherPhoto: se consulta por separado para que las vistas de perfil no carguen el archivo.
+model WorkerPhoto {
+  profileId String        @id @map("profile_id") @db.Uuid
+  mediaType String        @map("media_type") @db.VarChar(32)
+  content   Bytes
+  profile   WorkerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("worker_photos")
 }
 
 enum PublisherKind {

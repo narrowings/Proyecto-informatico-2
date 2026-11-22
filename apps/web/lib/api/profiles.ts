@@ -1,22 +1,22 @@
 /**
- * Contrato provisional del perfil de trabajador (HU-002), alineado con el
- * modelo `WorkerProfile` de Prisma (T-01). Debe reemplazarse por el cliente
- * generado de @red/contracts cuando exista el contrato de HU-002.
+ * Contrato del perfil de trabajador (HU-002) con `POST /v1/profiles/worker`.
+ * El formulario envía la foto junto con los datos, como el perfil de publicador.
  */
 
 export type WorkerAvailability = 'AVAILABLE' | 'UNAVAILABLE';
 
 export type CreateWorkerProfileRequest = {
   displayName: string;
-  photoUrl: string;
+  photo: File;
   skills: string[];
   experience?: string;
   zoneId: number;
   categoryIds: number[];
 };
 
-export type WorkerProfile = CreateWorkerProfileRequest & {
+export type WorkerProfile = Omit<CreateWorkerProfileRequest, 'photo'> & {
   id: string;
+  photoUrl: string;
   /** HU-002 CA1: al crear el perfil queda "Disponible". */
   availability: WorkerAvailability;
 };
@@ -51,11 +51,6 @@ export type CreatePublisherProfileResult =
   | { ok: false; reason: 'nit_taken' };
 
 export type ProfilesApi = {
-  /**
-   * Sube la foto y devuelve su URL. Provisional: en el Sprint 2 la subida será
-   * directa a S3 con una URL firmada que emite la API.
-   */
-  uploadProfilePhoto(file: File): Promise<{ url: string }>;
   createWorkerProfile(request: CreateWorkerProfileRequest): Promise<CreateWorkerProfileResult>;
   createPublisherProfile(
     request: CreatePublisherProfileRequest,

@@ -1,7 +1,7 @@
 export { authApi } from './auth.http';
 export { sessionApi } from './session.http';
 export { profilesApi } from './profiles.http';
-export { mockCatalogsApi as catalogsApi } from './catalogs.mock';
+export { catalogsApi } from './catalogs.http';
 
 export type * from './auth';
 export type * from './catalogs';

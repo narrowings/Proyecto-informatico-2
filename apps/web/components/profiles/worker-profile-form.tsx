@@ -119,10 +119,9 @@ export function WorkerProfileForm({ fromWork = false }: { fromWork?: boolean }) 
   const submit = handleSubmit(async (values) => {
     setOutcome(null);
     try {
-      const { url } = await profilesApi.uploadProfilePhoto(values.photo);
       const result = await profilesApi.createWorkerProfile({
         displayName: values.displayName,
-        photoUrl: url,
+        photo: values.photo,
         skills: values.skills,
         experience: values.experience || undefined,
         zoneId: Number(values.zoneId),
