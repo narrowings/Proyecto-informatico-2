@@ -195,6 +195,13 @@ export class IdentityService {
     );
   }
 
+  getNotificationRecipient(userId: string) {
+    return this.prisma.user.findUnique({
+      where: { id: userId, status: AccountStatus.ACTIVE },
+      select: { name: true, email: true },
+    });
+  }
+
   getContact(userId: string) {
     return this.prisma.user.findUnique({
       where: { id: userId },
