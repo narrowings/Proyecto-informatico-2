@@ -10,6 +10,6 @@ import { WorkerProfilesService } from './worker-profiles.service';
   imports: [IdentityModule, CatalogsModule],
   controllers: [PublisherProfilesController, WorkerProfilesController],
   providers: [ProfilesService, WorkerProfilesService],
-  exports: [ProfilesService],
+  exports: [ProfilesService, WorkerProfilesService],
 })
 export class ProfilesModule {}

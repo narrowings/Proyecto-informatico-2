@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import type { ModuleRef } from '@nestjs/core';
 import { Prisma } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
 import type { CatalogsService } from '../catalogs/catalogs.service';
@@ -56,12 +57,15 @@ const setup = ({
     isActiveZone: vi.fn().mockResolvedValue(zoneOk),
     findInvalidCategoryIds: vi.fn().mockResolvedValue(invalid),
   };
+  const ratings = { getSummary: vi.fn().mockResolvedValue({ average: 4.5, isNew: false }) };
+  const moduleRef = { get: vi.fn().mockReturnValue(ratings) };
   const service = new WorkerProfilesService(
     prisma as unknown as PrismaService,
     identity as unknown as IdentityService,
     catalogs as unknown as CatalogsService,
+    moduleRef as unknown as ModuleRef,
   );
-  return { prisma, identity, catalogs, service };
+  return { prisma, identity, catalogs, ratings, moduleRef, service };
 };
 
 describe('WorkerProfilesService.create (HU-002)', () => {
@@ -150,5 +154,89 @@ describe('WorkerProfilesService lecturas', () => {
     const { prisma, service } = setup();
     prisma.workerPhoto.findUnique.mockResolvedValue(null);
     await expect(service.getPhoto('w9')).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('WorkerProfilesService edición y perfil público (HU-032, HU-029, HU-030)', () => {
+  const withStored = () => {
+    const ctx = setup();
+    ctx.prisma.workerProfile.findUnique.mockResolvedValue({ id: 'w1' });
+    Object.assign(ctx.prisma.workerProfile, {
+      update: vi
+        .fn()
+        .mockImplementation(async () => record({ showPhoto: true, showExperience: true })),
+      findMany: vi.fn().mockResolvedValue([]),
+    });
+    return ctx;
+  };
+
+  it('HU-032 CA2: cambia la disponibilidad sin tocar lo demás ni validar catálogos ausentes', async () => {
+    const { prisma, catalogs, service } = withStored();
+    await service.update('u1', { availability: 'UNAVAILABLE' });
+    const { data } = (prisma.workerProfile as unknown as { update: ReturnType<typeof vi.fn> })
+      .update.mock.calls[0][0];
+    expect(data).toMatchObject({
+      availability: 'UNAVAILABLE',
+      displayName: undefined,
+      zoneId: undefined,
+    });
+    expect(data).not.toHaveProperty('categories');
+    expect(catalogs.isActiveZone).not.toHaveBeenCalled();
+    expect(catalogs.findInvalidCategoryIds).not.toHaveBeenCalled();
+  });
+
+  it('HU-032 CA1: reemplaza las categorías y borra la experiencia vacía', async () => {
+    const { prisma, service } = withStored();
+    await service.update('u1', { categoryIds: [3, 3, 1], experience: '' });
+    const { data } = (prisma.workerProfile as unknown as { update: ReturnType<typeof vi.fn> })
+      .update.mock.calls[0][0];
+    expect(data.categories).toEqual({ set: [{ id: 3 }, { id: 1 }] });
+    expect(data.experience).toBeNull();
+  });
+
+  it('una zona inválida en la edición se rechaza por campo', async () => {
+    const { catalogs, service } = withStored();
+    catalogs.isActiveZone.mockResolvedValue(false);
+    await expect(service.update('u1', { zoneId: 99 })).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('sin perfil, editar o cambiar la foto responde 404', async () => {
+    const { service } = setup();
+    await expect(service.update('u1', { availability: 'AVAILABLE' })).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    await expect(service.replacePhoto('u1', photo)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('la nueva foto cambia la URL para que no se muestre la anterior en caché', async () => {
+    const { prisma, service } = withStored();
+    await service.replacePhoto('u1', photo);
+    const { data } = (prisma.workerProfile as unknown as { update: ReturnType<typeof vi.fn> })
+      .update.mock.calls[0][0];
+    expect(data.photoUrl).toMatch(/^\/v1\/profiles\/worker\/w1\/photo\?v=\d+$/);
+    expect(data.photo.upsert.update.mediaType).toBe('image/png');
+  });
+
+  it('HU-030 CA4 y HU-029 CA4: el perfil público oculta foto y experiencia si así lo eligió, sin datos de contacto', async () => {
+    const { prisma, ratings, service } = setup();
+    prisma.workerProfile.findUnique.mockResolvedValue({
+      ...record(),
+      userId: 'u1',
+      showPhoto: false,
+      showExperience: false,
+    });
+    const result = await service.getPublic('w1');
+    expect(result).toMatchObject({
+      photoUrl: null,
+      experience: null,
+      reputation: { average: 4.5 },
+    });
+    expect(result).not.toHaveProperty('userId');
+    expect(result).not.toHaveProperty('showPhoto');
+    expect(ratings.getSummary).toHaveBeenCalledWith('u1', 'WORKER');
+  });
+
+  it('perfil público inexistente: 404', async () => {
+    await expect(setup().service.getPublic('x')).rejects.toBeInstanceOf(NotFoundException);
   });
 });

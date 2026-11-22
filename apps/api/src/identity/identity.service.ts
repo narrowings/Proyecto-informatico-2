@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   GoneException,
+  Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -30,9 +31,9 @@ export class IdentityService {
   private readonly logger = new Logger(IdentityService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly mailer: ConfirmationMailer,
-    private readonly config: ConfigService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(ConfirmationMailer) private readonly mailer: ConfirmationMailer,
+    @Inject(ConfigService) private readonly config: ConfigService,
   ) {}
 
   // HU-001 CA1 y HU-017 CA2: crea la cuenta pendiente, sus consentimientos y el enlace en una sola escritura.
@@ -183,6 +184,22 @@ export class IdentityService {
       throw new InternalServerErrorException('Faltan documentos legales vigentes; ejecuta el seed');
     }
     return documents;
+  }
+
+  async hasCurrentCredential(userId: string, passwordHash: string, tx: Prisma.TransactionClient) {
+    return Boolean(
+      await tx.user.findUnique({
+        where: { id: userId, passwordHash, status: AccountStatus.ACTIVE },
+        select: { id: true },
+      }),
+    );
+  }
+
+  getContact(userId: string) {
+    return this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, phone: true },
+    });
   }
 
   // RF-01-05: otros módulos consultan el estado de la cuenta por aquí, nunca leen la tabla users.

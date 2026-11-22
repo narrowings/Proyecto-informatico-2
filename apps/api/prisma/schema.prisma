@@ -42,6 +42,11 @@ model User {
   refreshTokens      RefreshToken[]
   workerProfile      WorkerProfile?
   publisherProfile   PublisherProfile?
+  passwordResets     PasswordResetToken[]
+  ratingsGiven       Rating[]                 @relation("rating_rater")
+  ratingsReceived    Rating[]                 @relation("rating_ratee")
+  reputations        ReputationSummary[]
+  notifications      Notification[]
 
   @@map("users")
 }
@@ -81,6 +86,21 @@ model RefreshToken {
   @@index([userId])
   @@index([familyId])
   @@map("refresh_tokens")
+}
+
+// HU-018 (Sprint 3): enlace de recuperación de contraseña. Solo se guarda el hash del token.
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.Char(64)
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 enum LegalDocumentType {
@@ -128,6 +148,7 @@ model Zone {
   isActive Boolean @default(true) @map("is_active")
 
   workerProfiles WorkerProfile[]
+  opportunities  Opportunity[]
 
   @@map("zones")
 }
@@ -139,6 +160,7 @@ model Category {
   isActive    Boolean @default(true) @map("is_active") // HU-037: el administrador las activa o desactiva
 
   workerProfiles WorkerProfile[] @relation("worker_profile_categories")
+  opportunities  Opportunity[]
 
   @@map("categories")
 }
@@ -151,22 +173,27 @@ enum WorkerAvailability {
 }
 
 model WorkerProfile {
-  id           String             @id @default(uuid()) @db.Uuid
-  userId       String             @unique @map("user_id") @db.Uuid
-  displayName  String             @map("display_name") @db.VarChar(120)
-  photoUrl     String             @map("photo_url") @db.VarChar(500)
-  skills       String[]
-  experience   String?            @db.VarChar(2000)
-  zoneId       Int                @map("zone_id")
-  availability WorkerAvailability @default(AVAILABLE)
-  createdAt    DateTime           @default(now()) @map("created_at")
-  updatedAt    DateTime           @updatedAt @map("updated_at")
+  id             String             @id @default(uuid()) @db.Uuid
+  userId         String             @unique @map("user_id") @db.Uuid
+  displayName    String             @map("display_name") @db.VarChar(120)
+  photoUrl       String             @map("photo_url") @db.VarChar(500)
+  skills         String[]
+  experience     String?            @db.VarChar(2000)
+  zoneId         Int                @map("zone_id")
+  availability   WorkerAvailability @default(AVAILABLE)
+  // HU-030 CA4: el trabajador elige si su perfil público muestra la foto y la experiencia.
+  showPhoto      Boolean            @default(true) @map("show_photo")
+  showExperience Boolean            @default(true) @map("show_experience")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
 
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   zone       Zone       @relation(fields: [zoneId], references: [id])
   categories Category[] @relation("worker_profile_categories") // HU-002: categorías de interés
 
-  photo WorkerPhoto?
+  photo        WorkerPhoto?
+  applications Application[]
+  jobs         Job[]
 
   @@map("worker_profiles")
 }
@@ -204,7 +231,8 @@ model PublisherProfile {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  photo PublisherPhoto?
+  photo         PublisherPhoto?
+  opportunities Opportunity[]
 
   @@map("publisher_profiles")
 }
@@ -217,4 +245,296 @@ model PublisherPhoto {
   profile   PublisherProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@map("publisher_photos")
+}
+
+// ─── opportunities (EP-03, Sprint 2) ─────────────────────────────────────────
+// Dueño: módulo opportunities. Los demás módulos usan OpportunitiesService, no estas tablas.
+
+enum OpportunityType {
+  FORMAL_JOB // empleo formal: feed tradicional (Modo A)
+  QUICK_JOB // trabajo rápido
+  TASK // tarea
+  PROJECT
+  SERVICE
+}
+
+// HU-023 CA1: Activa, Pausada, Cerrada, Vencida, Cancelada.
+enum OpportunityStatus {
+  ACTIVE
+  PAUSED
+  CLOSED
+  EXPIRED
+  CANCELLED
+}
+
+enum WorkModality {
+  ONSITE
+  REMOTE
+  HYBRID
+}
+
+enum WorkSchedule {
+  FULL_TIME
+  PART_TIME
+  SHIFTS
+  FLEXIBLE
+}
+
+// HU-003 (tareas, trabajos rápidos, proyectos y servicios) y HU-024 (vacante formal) comparten tabla.
+// Los campos de cada tipo son nulos en el otro; el DTO de cada tipo exige los suyos.
+// Montos en pesos colombianos enteros (RN-19: mayores que cero).
+model Opportunity {
+  id                 String            @id @default(uuid()) @db.Uuid
+  publisherProfileId String            @map("publisher_profile_id") @db.Uuid
+  type               OpportunityType
+  status             OpportunityStatus @default(ACTIVE)
+  title              String            @db.VarChar(120) // actividad o cargo
+  description        String            @db.VarChar(3000)
+  categoryId         Int               @map("category_id")
+  zoneId             Int               @map("zone_id") // RF-03-04: solo zona; nunca la dirección exacta aquí
+
+  // RF-03-02: tareas, trabajos rápidos, proyectos y servicios.
+  peopleNeeded    Int?      @map("people_needed") // N de HU-006
+  paymentCop      Int?      @map("payment_cop")
+  scheduledAt     DateTime? @map("scheduled_at") // fecha y hora de realización
+  durationMinutes Int?      @map("duration_minutes")
+  conditions      String?   @db.VarChar(1000)
+
+  // RF-03-03: vacante formal.
+  salaryMinCop       Int?          @map("salary_min_cop")
+  salaryMaxCop       Int?          @map("salary_max_cop")
+  modality           WorkModality?
+  schedule           WorkSchedule?
+  experienceRequired String?       @map("experience_required") @db.VarChar(500)
+  requirements       String?       @db.VarChar(2000)
+  closesAt           DateTime?     @map("closes_at") // fecha de cierre de la vacante
+
+  // HU-003 CA2 / RF-03-05: advertencia de relación laboral (Ley 2466 de 2025).
+  laborWarningCodes          String[]  @map("labor_warning_codes")
+  laborWarningAcknowledgedAt DateTime? @map("labor_warning_acknowledged_at")
+
+  // RF-05-12 y decisión del PO: el publicador la registra y solo la ven los trabajadores que
+  // aceptaron la selección de esta oportunidad. Nunca va en respuestas públicas.
+  exactAddress String? @map("exact_address") @db.VarChar(300)
+
+  // RF-04-08: título, descripción y categoría en minúsculas y sin tildes; lo mantiene OpportunitiesService.
+  searchText String @default("") @map("search_text") @db.Text
+
+  statusReason String?   @map("status_reason") @db.VarChar(500) // HU-023 CA3: motivo al pausar, cerrar o cancelar
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  closedAt     DateTime? @map("closed_at")
+
+  publisher    PublisherProfile @relation(fields: [publisherProfileId], references: [id], onDelete: Restrict)
+  category     Category         @relation(fields: [categoryId], references: [id])
+  zone         Zone             @relation(fields: [zoneId], references: [id])
+  applications Application[]
+  jobs         Job[]
+
+  @@index([status, type, createdAt])
+  @@index([publisherProfileId, status])
+  @@index([categoryId])
+  @@index([zoneId])
+  @@map("opportunities")
+}
+
+// RF-03-05: reglas parametrizables por el administrador. `code` identifica la regla en el código
+// y `params` sus umbrales (p. ej. { "minMinutes": 480 }); el texto lo aprueba asesoría jurídica.
+model LaborWarningRule {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique @db.VarChar(50)
+  message   String   @db.VarChar(1000)
+  params    Json     @default("{}")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("labor_warning_rules")
+}
+
+// ─── applications (EP-05, Sprint 2) ──────────────────────────────────────────
+// Dueño: módulo applications. "Me interesa" (tareas) y "Postularme" (vacante formal) son la misma fila.
+
+// HU-005 y HU-024 CA2. En tareas el estado inicial RECEIVED equivale a "Interesado";
+// la selección de HU-006 vive en Selection.
+enum ApplicationStatus {
+  RECEIVED
+  IN_REVIEW
+  INTERVIEW
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+model Application {
+  id              String            @id @default(uuid()) @db.Uuid
+  opportunityId   String            @map("opportunity_id") @db.Uuid
+  workerProfileId String            @map("worker_profile_id") @db.Uuid
+  status          ApplicationStatus @default(RECEIVED)
+  message         String?           @db.VarChar(1000) // HU-005 CA4: mensaje opcional en vacantes
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  opportunity Opportunity   @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  worker      WorkerProfile @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  selection   Selection?
+
+  // RN-07 / RF-05-02: una sola postulación por trabajador y oportunidad.
+  @@unique([opportunityId, workerProfileId])
+  @@index([workerProfileId, status])
+  @@map("applications")
+}
+
+// ─── engagements (EP-05 y EP-06, Sprint 3) ───────────────────────────────────
+// Dueño: módulo engagements (selección y trabajos).
+
+enum SelectionStatus {
+  PENDING // esperando que el trabajador acepte o rechace
+  ACCEPTED
+  REJECTED
+  EXPIRED // RF-05-08: sin respuesta en 24 h
+}
+
+// HU-006: el publicador selecciona interesados hasta N. Pendientes + aceptadas <= N (RN-08).
+model Selection {
+  id              String          @id @default(uuid()) @db.Uuid
+  applicationId   String          @unique @map("application_id") @db.Uuid
+  status          SelectionStatus @default(PENDING)
+  expiresAt       DateTime        @map("expires_at")
+  respondedAt     DateTime?       @map("responded_at")
+  // Decisión del PO: al aceptar, el trabajador acepta términos y condiciones del trabajo;
+  // solo entonces ve la dirección exacta y el teléfono de la otra parte.
+  termsAcceptedAt DateTime?       @map("terms_accepted_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  job         Job?
+
+  @@index([status, expiresAt])
+  @@map("selections")
+}
+
+// HU-028 simplificada: Programado → En curso → Completado, o Cancelado antes de iniciar.
+enum JobStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// Un trabajo por cada selección aceptada.
+model Job {
+  id               String    @id @default(uuid()) @db.Uuid
+  selectionId      String    @unique @map("selection_id") @db.Uuid
+  opportunityId    String    @map("opportunity_id") @db.Uuid
+  workerProfileId  String    @map("worker_profile_id") @db.Uuid
+  status           JobStatus @default(SCHEDULED)
+  scheduledAt      DateTime  @map("scheduled_at")
+  finishMarkedAt   DateTime? @map("finish_marked_at") // RF-06-02: una parte marca terminado...
+  finishMarkedById String?   @map("finish_marked_by_id") @db.Uuid
+  completedAt      DateTime? @map("completed_at") // ...y la otra lo confirma
+  cancelledAt      DateTime? @map("cancelled_at")
+  cancelledById    String?   @map("cancelled_by_id") @db.Uuid
+  cancelReason     String?   @map("cancel_reason") @db.VarChar(500)
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  selection   Selection     @relation(fields: [selectionId], references: [id], onDelete: Restrict)
+  opportunity Opportunity   @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+  worker      WorkerProfile @relation(fields: [workerProfileId], references: [id], onDelete: Restrict)
+  ratings     Rating[]
+
+  @@index([workerProfileId, status])
+  @@index([opportunityId, status])
+  @@index([status, scheduledAt])
+  @@map("jobs")
+}
+
+// ─── ratings (EP-08, Sprint 3) ───────────────────────────────────────────────
+// Dueño: módulo ratings.
+
+enum RatedRole {
+  WORKER
+  PUBLISHER
+}
+
+// HU-007: 1 a 5 en cada dimensión, una sola vez por trabajo y persona (RF-08-04), inmutable.
+// RF-08-02: oculta hasta que ambas partes califiquen o pasen 7 días (publishedAt).
+model Rating {
+  id            String    @id @default(uuid()) @db.Uuid
+  jobId         String    @map("job_id") @db.Uuid
+  raterUserId   String    @map("rater_user_id") @db.Uuid
+  rateeUserId   String    @map("ratee_user_id") @db.Uuid
+  rateeRole     RatedRole @map("ratee_role")
+  fulfillment   Int // cumplimiento
+  punctuality   Int
+  communication Int
+  quality       Int
+  comment       String?   @db.VarChar(500)
+  publishedAt   DateTime? @map("published_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  job   Job  @relation(fields: [jobId], references: [id], onDelete: Restrict)
+  rater User @relation("rating_rater", fields: [raterUserId], references: [id], onDelete: Restrict)
+  ratee User @relation("rating_ratee", fields: [rateeUserId], references: [id], onDelete: Restrict)
+
+  @@unique([jobId, raterUserId])
+  @@index([rateeUserId, rateeRole, publishedAt])
+  @@map("ratings")
+}
+
+// HU-046: promedios precalculados al publicar cada calificación (RF-08-05), por persona y rol.
+model ReputationSummary {
+  userId           String    @map("user_id") @db.Uuid
+  role             RatedRole
+  ratingsCount     Int       @default(0) @map("ratings_count")
+  completedJobs    Int       @default(0) @map("completed_jobs")
+  avgOverall       Decimal?  @map("avg_overall") @db.Decimal(3, 2)
+  avgFulfillment   Decimal?  @map("avg_fulfillment") @db.Decimal(3, 2)
+  avgPunctuality   Decimal?  @map("avg_punctuality") @db.Decimal(3, 2)
+  avgCommunication Decimal?  @map("avg_communication") @db.Decimal(3, 2)
+  avgQuality       Decimal?  @map("avg_quality") @db.Decimal(3, 2)
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, role])
+  @@map("reputation_summaries")
+}
+
+// ─── notifications (EP-07, mínimo) ───────────────────────────────────────────
+// Dueño: módulo notifications. Bandeja en la plataforma + correo; sin tiempo real (sin WebSocket).
+
+// RF-07-06: catálogo de eventos. Cada módulo solo emite el evento con NotificationsService.
+enum NotificationType {
+  NEW_APPLICANT
+  APPLICATION_STATUS_CHANGED
+  SELECTION_RECEIVED
+  SELECTION_ACCEPTED
+  SELECTION_REJECTED
+  SELECTION_EXPIRED
+  OPPORTUNITY_UPDATED
+  OPPORTUNITY_CANCELLED
+  JOB_FINISH_MARKED
+  JOB_COMPLETED
+  JOB_CANCELLED
+  RATING_AVAILABLE
+}
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  type      NotificationType
+  title     String           @db.VarChar(160)
+  body      String           @db.VarChar(500)
+  link      String?          @db.VarChar(300) // RF-07-07: pantalla a la que lleva al abrirla
+  data      Json             @default("{}")
+  readAt    DateTime?        @map("read_at")
+  emailedAt DateTime?        @map("emailed_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@map("notifications")
 }

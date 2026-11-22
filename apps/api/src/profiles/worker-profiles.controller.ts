@@ -6,7 +6,9 @@ import {
   Inject,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
+  Put,
   StreamableFile,
   UploadedFile,
   UseGuards,
@@ -14,7 +16,9 @@ import {
 } from '@nestjs/common';
 import { AuthenticatedGuard } from '../common/auth/authenticated.guard';
 import { CurrentUser, type AuthUser } from '../common/auth/current-user.decorator';
+import { validateDto } from '../common/http/validate-dto';
 import { CreateWorkerProfileDto } from './dto/create-worker-profile.dto';
+import { UpdateWorkerProfileDto } from './dto/update-worker-profile.dto';
 import { photoInterceptor, photoPipe, type UploadedPhoto } from './photo';
 import { WorkerProfilesService } from './worker-profiles.service';
 
@@ -38,6 +42,29 @@ export class WorkerProfilesController {
   @UseGuards(AuthenticatedGuard)
   me(@CurrentUser() user: AuthUser) {
     return this.workers.getOwn(user.id);
+  }
+
+  // HU-032 CA1–CA2 y HU-030 CA4.
+  @Patch('me')
+  @UseGuards(AuthenticatedGuard)
+  update(
+    @CurrentUser() user: AuthUser,
+    @Body(validateDto(UpdateWorkerProfileDto)) dto: UpdateWorkerProfileDto,
+  ) {
+    return this.workers.update(user.id, dto);
+  }
+
+  @Put('me/photo')
+  @UseGuards(AuthenticatedGuard)
+  @UseInterceptors(photoInterceptor(0))
+  replacePhoto(@CurrentUser() user: AuthUser, @UploadedFile(photoPipe()) photo: UploadedPhoto) {
+    return this.workers.replacePhoto(user.id, photo);
+  }
+
+  // HU-029: perfil público del trabajador. Va después de "me" para que no se lea como id.
+  @Get(':id')
+  publicProfile(@Param('id', ParseUUIDPipe) id: string) {
+    return this.workers.getPublic(id);
   }
 
   // Pública: la foto se muestra en tarjetas y perfiles. nosniff evita que se interprete como HTML.

@@ -27,6 +27,14 @@ export class CatalogsService {
     });
   }
 
+  // null si no existe o está inactiva (RN-17: solo se publica en categorías activas).
+  getActiveCategory(id: number) {
+    return this.prisma.category.findFirst({
+      where: { id, isActive: true },
+      select: { id: true, name: true },
+    });
+  }
+
   async isActiveZone(id: number) {
     return (await this.prisma.zone.count({ where: { id, isActive: true } })) === 1;
   }
