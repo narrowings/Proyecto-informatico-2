@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { ApiError, API_ORIGIN, authenticated, request } from './http';
+import { ApiError, API_ORIGIN, asBlob, authenticated, request } from './http';
 import type {
+  OwnWorkerProfile,
   ProfilesApi,
   PublicPublisherProfile,
   PublicWorkerProfile,
@@ -84,6 +85,49 @@ export const profilesApi: ProfilesApi = {
       if (error instanceof ApiError && error.status === 404) return null;
       throw error;
     }
+  },
+  async getOwnWorkerProfile() {
+    try {
+      return await authenticated<OwnWorkerProfile>('/profiles/worker/me');
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return null;
+      throw error;
+    }
+  },
+  async updateWorkerProfile(changes) {
+    try {
+      const profile = await authenticated<OwnWorkerProfile>('/profiles/worker/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(changes),
+      });
+      return { ok: true, profile };
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 400 && error.problem.errors)
+        return { ok: false, errors: error.problem.errors };
+      throw error;
+    }
+  },
+  async replaceWorkerPhoto(photo) {
+    const body = new FormData();
+    body.set('photo', photo);
+    try {
+      const profile = await authenticated<OwnWorkerProfile>('/profiles/worker/me/photo', {
+        method: 'PUT',
+        body,
+      });
+      return { ok: true, profile };
+    } catch (error) {
+      if (error instanceof ApiError) {
+        if (error.status === 413) return { ok: false, reason: 'too_large' };
+        if (error.status === 400)
+          return { ok: false, reason: 'invalid', message: error.problem.message };
+      }
+      throw error;
+    }
+  },
+  getOwnWorkerPhoto() {
+    return authenticated('/profiles/worker/me/photo', {}, asBlob);
   },
 };
 
