@@ -284,3 +284,62 @@ describe('HU-014 Destinatarios de las notificaciones', () => {
     await expect(service.getNotificationRecipient('u1')).resolves.toBeNull();
   });
 });
+
+describe('Acceso y estado de cuenta para administración (HU-012)', () => {
+  const adminSetup = () => {
+    const ctx = setup();
+    const user = ctx.prisma.user as Record<string, ReturnType<typeof vi.fn>>;
+    user.count = vi.fn().mockResolvedValue(1);
+    user.findMany = vi.fn().mockResolvedValue([{ id: 'u1' }]);
+    user.updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    return { ...ctx, user };
+  };
+
+  it('getAccess lee solo rol y estado', async () => {
+    const { user, service } = adminSetup();
+    user.findUnique.mockResolvedValue({ role: 'ADMIN', status: 'ACTIVE' });
+    await expect(service.getAccess('u1')).resolves.toEqual({ role: 'ADMIN', status: 'ACTIVE' });
+    expect(user.findUnique).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      select: { role: true, status: true },
+    });
+  });
+
+  it('CA3: busca por nombre sin distinguir mayúsculas o por correo, filtra por estado y pagina', async () => {
+    const { user, service } = adminSetup();
+    const result = await service.searchUsers({
+      q: '  ANA@ ',
+      status: 'ACTIVE',
+      page: 2,
+      pageSize: 5,
+    });
+    const where = {
+      status: 'ACTIVE',
+      OR: [{ name: { contains: 'ANA@', mode: 'insensitive' } }, { email: { contains: 'ana@' } }],
+    };
+    expect(user.count).toHaveBeenCalledWith({ where });
+    expect(user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where, skip: 5, take: 5 }),
+    );
+    const { select } = user.findMany.mock.calls[0][0];
+    expect(select).not.toHaveProperty('passwordHash');
+    expect(result).toMatchObject({ total: 1, page: 2, pageSize: 5 });
+  });
+
+  it('una búsqueda vacía no filtra por texto', async () => {
+    const { user, service } = adminSetup();
+    await service.searchUsers({ q: '   ', page: 1, pageSize: 20 });
+    expect(user.count).toHaveBeenCalledWith({ where: {} });
+  });
+
+  it('cambia el estado solo desde los estados permitidos', async () => {
+    const { user, service } = adminSetup();
+    await expect(service.setAccountStatus('u1', ['ACTIVE'], 'BLOCKED')).resolves.toBe(true);
+    expect(user.updateMany).toHaveBeenCalledWith({
+      where: { id: 'u1', status: { in: ['ACTIVE'] } },
+      data: { status: 'BLOCKED' },
+    });
+    user.updateMany.mockResolvedValue({ count: 0 });
+    await expect(service.setAccountStatus('u1', ['ACTIVE'], 'BLOCKED')).resolves.toBe(false);
+  });
+});

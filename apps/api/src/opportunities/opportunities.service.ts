@@ -15,6 +15,7 @@ import {
   type ApplicationsContract,
 } from '../applications/applications.contract';
 import { CatalogsService } from '../catalogs/catalogs.service';
+import { REPORTS, type ReportsContract } from '../reports/reports.contract';
 import { validationPipe } from '../common/validation';
 import { IdentityService } from '../identity/identity.service';
 import {
@@ -216,11 +217,18 @@ export class OpportunitiesService implements OpportunitiesContract {
   // ─── Lecturas ──────────────────────────────────────────────────────────────
 
   // HU-009 y HU-010: solo activas y con fecha futura (RF-04-06), con filtros combinables.
-  async listFeed(query: ListOpportunitiesQuery, now = new Date()) {
+  // viewerId: quien consulta, si hay sesión. RF-04-06: no ve lo que él mismo reportó (HU-019 CA1).
+  async listFeed(query: ListOpportunitiesQuery, now = new Date(), viewerId?: string) {
     const formal = query.mode === 'formal';
     const words = query.q ? normalizeSearch(query.q).split(' ').filter(Boolean) : [];
+    const reported = viewerId
+      ? ((await this.reportsContract()?.listReportedTargetIds(viewerId, 'OPPORTUNITY')) ?? [])
+      : [];
     const where: Prisma.OpportunityWhereInput = {
       status: ACTIVE,
+      // HU-012 CA1: lo oculto por moderación no aparece en el feed.
+      hiddenAt: null,
+      ...(reported.length > 0 && { id: { notIn: reported } }),
       AND: words.map((word) => ({ searchText: { contains: word } })),
       ...(query.categoryId && { categoryId: query.categoryId }),
       ...(query.zoneId && { zoneId: query.zoneId }),
@@ -282,7 +290,8 @@ export class OpportunitiesService implements OpportunitiesContract {
   // HU-026: detalle público. Nunca incluye la dirección exacta ni el contacto (RF-02-07).
   async getPublic(id: string) {
     const row = await this.prisma.opportunity.findUnique({ where: { id }, include: cardInclude });
-    if (!row || row.status === CANCELLED) throw notFound();
+    // Oculta por moderación: 404 igual que si no existiera (el dueño la ve en "Mis publicaciones").
+    if (!row || row.status === CANCELLED || row.hiddenAt) throw notFound();
     const publishers = await this.profiles.getPublisherCards([row.publisherProfileId]);
     return toPublicView(row, publishers.get(row.publisherProfileId));
   }
@@ -298,7 +307,13 @@ export class OpportunitiesService implements OpportunitiesContract {
       rows.map((row) => row.publisherProfileId),
     );
     return new Map(
-      rows.map((row) => [row.id, toPublicView(row, publishers.get(row.publisherProfileId))]),
+      rows.map((row) => [
+        row.id,
+        {
+          ...toPublicView(row, publishers.get(row.publisherProfileId)),
+          hidden: row.hiddenAt != null,
+        },
+      ]),
     );
   }
 
@@ -309,11 +324,12 @@ export class OpportunitiesService implements OpportunitiesContract {
       type: OpportunityType;
       scheduledAt: Date | null;
       closesAt: Date | null;
+      hidden?: boolean;
     },
     now = new Date(),
   ) {
     const date = isFormalType(view.type) ? view.closesAt : view.scheduledAt;
-    return view.status === ACTIVE && date !== null && date > now;
+    return view.status === ACTIVE && !view.hidden && date !== null && date > now;
   }
 
   // HU-023 CA1: "Mis publicaciones" con todos sus estados.
@@ -406,7 +422,66 @@ export class OpportunitiesService implements OpportunitiesContract {
     });
   }
 
+  // ─── Moderación (HU-012 CA1), para el módulo de moderación ───────────────────
+
+  // Oculta sin cambiar el estado, para poder revertirlo. Devuelve los datos para avisar al dueño,
+  // o null si no existe o ya estaba oculta (dos administradores a la vez: solo uno la oculta).
+  async hideByModeration(
+    id: string,
+    reason: string,
+    now = new Date(),
+    tx: Prisma.TransactionClient = this.prisma,
+  ) {
+    const { count } = await tx.opportunity.updateMany({
+      where: { id, hiddenAt: null },
+      data: { hiddenAt: now, hiddenReason: reason },
+    });
+    if (count === 0) return null;
+    return this.moderationTarget(id, tx);
+  }
+
+  async unhideByModeration(id: string, tx: Prisma.TransactionClient = this.prisma) {
+    const { count } = await tx.opportunity.updateMany({
+      where: { id, hiddenAt: { not: null } },
+      data: { hiddenAt: null, hiddenReason: null },
+    });
+    if (count === 0) return null;
+    return this.moderationTarget(id, tx);
+  }
+
+  // Lo que ve el administrador de una publicación reportada (incluida la oculta).
+  async getForModeration(id: string) {
+    const row = await this.prisma.opportunity.findUnique({ where: { id }, include: cardInclude });
+    if (!row) return null;
+    const publisherUserId = await this.profiles.getPublisherUserId(row.publisherProfileId);
+    return {
+      ...baseView(row),
+      publisherUserId,
+      hiddenAt: row.hiddenAt,
+      hiddenReason: row.hiddenReason,
+    };
+  }
+
+  private async moderationTarget(id: string, tx: Prisma.TransactionClient) {
+    const row = await tx.opportunity.findUnique({
+      where: { id },
+      select: { id: true, title: true, publisherProfileId: true },
+    });
+    if (!row) return null;
+    const publisherUserId = await this.profiles.getPublisherUserId(row.publisherProfileId);
+    return { id: row.id, title: row.title, publisherUserId };
+  }
+
   // ─── Internos ──────────────────────────────────────────────────────────────
+
+  // null si el módulo de reportes no está cargado (p. ej. pruebas del módulo solo).
+  private reportsContract() {
+    try {
+      return this.moduleRef.get<ReportsContract>(REPORTS, { strict: false });
+    } catch {
+      return null;
+    }
+  }
 
   // null si el módulo de postulaciones no está cargado (p. ej. pruebas del módulo solo).
   private applicationsContract() {
@@ -622,6 +697,9 @@ const toPublicView = (row: OpportunityWithCatalogs, publisher?: PublisherCard) =
 const toOwnerView = (row: OpportunityWithCatalogs) => ({
   ...baseView(row),
   statusReason: row.statusReason,
+  // HU-012 CA1: el dueño ve que su publicación fue ocultada y el motivo, para poder apelar (HU-036).
+  hiddenAt: row.hiddenAt,
+  hiddenReason: row.hiddenReason,
   exactAddress: row.exactAddress,
   laborWarningCodes: row.laborWarningCodes,
   laborWarningAcknowledgedAt: row.laborWarningAcknowledgedAt,

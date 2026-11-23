@@ -12,7 +12,8 @@
     "test": "vitest run",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
-    "prisma:seed": "prisma db seed"
+    "prisma:seed": "prisma db seed",
+    "admin:promote": "node scripts/promote-admin.mts"
   },
   "prisma": {
     "seed": "node prisma/seed.ts"

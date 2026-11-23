@@ -78,7 +78,18 @@ describe('OpportunitiesController (HTTP)', () => {
 
   it('el feed y el detalle son públicos', async () => {
     expect((await send('GET', '?mode=tasks', undefined, null)).status).toBe(200);
-    expect(service.listFeed).toHaveBeenCalledWith(expect.objectContaining({ mode: 'tasks' }));
+    expect(service.listFeed).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'tasks' }),
+      expect.any(Date),
+      undefined,
+    );
+    // Con sesión, el feed recibe quién consulta para ocultarle lo que reportó (RF-04-06).
+    await send('GET', '?mode=tasks', undefined, 'u9');
+    expect(service.listFeed).toHaveBeenLastCalledWith(
+      expect.objectContaining({ mode: 'tasks' }),
+      expect.any(Date),
+      'u9',
+    );
     expect((await send('GET', `/${ID}`, undefined, null)).status).toBe(200);
     expect(service.getPublic).toHaveBeenCalledWith(ID);
   });

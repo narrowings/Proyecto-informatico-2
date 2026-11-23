@@ -55,6 +55,8 @@ const row = (overrides: object = {}) => ({
   exactAddress: 'Cra 1 # 2-3',
   searchText: '',
   statusReason: null,
+  hiddenAt: null as Date | null,
+  hiddenReason: null as string | null,
   createdAt: NOW,
   updatedAt: NOW,
   closedAt: null,
@@ -557,5 +559,102 @@ describe('OpportunitiesService con postulaciones (RF-03-07, 08, 09)', () => {
       type: 'OPPORTUNITY_CANCELLED',
       userId: 'w1',
     });
+  });
+});
+
+describe('OpportunitiesService moderación (HU-012 CA1, HU-019 CA1)', () => {
+  const withReports = (ctx: ReturnType<typeof setup>, ids: string[]) => {
+    const reports = { listReportedTargetIds: vi.fn().mockResolvedValue(ids) };
+    ctx.moduleRef.get.mockImplementation((token: symbol) =>
+      token.description === 'REPORTS' ? reports : ctx.applications,
+    );
+    return reports;
+  };
+
+  it('el feed excluye lo oculto y, con sesión, lo que el propio usuario reportó', async () => {
+    const ctx = setup();
+    const reports = withReports(ctx, ['o7', 'o8']);
+    await ctx.service.listFeed({ mode: 'tasks' }, NOW, 'u9');
+    expect(reports.listReportedTargetIds).toHaveBeenCalledWith('u9', 'OPPORTUNITY');
+    expect(ctx.prisma.opportunity.findMany.mock.calls[0][0].where).toMatchObject({
+      hiddenAt: null,
+      id: { notIn: ['o7', 'o8'] },
+    });
+  });
+
+  it('sin sesión no consulta reportes ni filtra por id', async () => {
+    const ctx = setup();
+    const reports = withReports(ctx, ['o7']);
+    await ctx.service.listFeed({ mode: 'tasks' }, NOW);
+    expect(reports.listReportedTargetIds).not.toHaveBeenCalled();
+    expect(ctx.prisma.opportunity.findMany.mock.calls[0][0].where).not.toHaveProperty('id');
+  });
+
+  it('si el módulo de reportes no está cargado el feed sigue funcionando', async () => {
+    const ctx = setup();
+    ctx.moduleRef.get.mockImplementation(() => {
+      throw new Error('no cargado');
+    });
+    await expect(ctx.service.listFeed({ mode: 'tasks' }, NOW, 'u9')).resolves.toMatchObject({
+      total: 1,
+    });
+  });
+
+  it('una publicación oculta no tiene detalle público', async () => {
+    const { service } = setup({ stored: row({ hiddenAt: NOW, hiddenReason: 'fraude' }) });
+    await expect(service.getPublic('o1')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('una publicación oculta no admite postulaciones', async () => {
+    const { service } = setup({ stored: row({ hiddenAt: NOW }) });
+    const view = (await service.getPublicByIds(['o1'])).get('o1')!;
+    expect(view).toMatchObject({ hidden: true });
+    expect(service.isOpenForApplications(view, NOW)).toBe(false);
+    expect(service.isOpenForApplications({ ...view, hidden: false }, NOW)).toBe(true);
+  });
+
+  it('ocultar es condicional y devuelve a quién avisar', async () => {
+    const { prisma, service } = setup();
+    await expect(service.hideByModeration('o1', 'Oferta engañosa', NOW)).resolves.toEqual({
+      id: 'o1',
+      title: expect.any(String),
+      publisherUserId: 'u1',
+    });
+    expect(prisma.opportunity.updateMany).toHaveBeenCalledWith({
+      where: { id: 'o1', hiddenAt: null },
+      data: { hiddenAt: NOW, hiddenReason: 'Oferta engañosa' },
+    });
+  });
+
+  it('ocultar lo ya oculto o mostrar lo visible no hace nada', async () => {
+    const { prisma, service } = setup();
+    prisma.opportunity.updateMany.mockResolvedValue({ count: 0 });
+    await expect(service.hideByModeration('o1', 'x', NOW)).resolves.toBeNull();
+    await expect(service.unhideByModeration('o1')).resolves.toBeNull();
+  });
+
+  it('mostrar de nuevo limpia la marca y el motivo', async () => {
+    const { prisma, service } = setup();
+    await expect(service.unhideByModeration('o1')).resolves.toMatchObject({ id: 'o1' });
+    expect(prisma.opportunity.updateMany).toHaveBeenCalledWith({
+      where: { id: 'o1', hiddenAt: { not: null } },
+      data: { hiddenAt: null, hiddenReason: null },
+    });
+  });
+
+  it('la vista de moderación incluye lo oculto, el motivo y el usuario publicador', async () => {
+    const { service } = setup({ stored: row({ hiddenAt: NOW, hiddenReason: 'fraude' }) });
+    await expect(service.getForModeration('o1')).resolves.toMatchObject({
+      id: 'o1',
+      hiddenAt: NOW,
+      hiddenReason: 'fraude',
+      publisherUserId: 'u1',
+    });
+  });
+
+  it('la vista de moderación de algo inexistente es null', async () => {
+    const { prisma, service } = setup();
+    prisma.opportunity.findUnique.mockResolvedValue(null);
+    await expect(service.getForModeration('nada')).resolves.toBeNull();
   });
 });
