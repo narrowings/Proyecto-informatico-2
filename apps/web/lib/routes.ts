@@ -30,3 +30,10 @@ export const ROUTES = {
 
 /** Perfil público de un trabajador (HU-029). */
 export const workerPublicPath = (id: string) => `/trabajadores/${encodeURIComponent(id)}`;
+
+/** Calificar a la contraparte de un trabajo completado (HU-007). */
+export const rateJobPath = (jobId: string) =>
+  `/mi-actividad/trabajos/${encodeURIComponent(jobId)}/calificar`;
+
+/** Mi reputación (HU-046, HU-013 CA3). */
+export const MY_REPUTATION_PATH = '/mi-actividad/reputacion';

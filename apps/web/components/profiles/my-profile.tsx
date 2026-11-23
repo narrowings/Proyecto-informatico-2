@@ -14,7 +14,7 @@ import {
   type Zone,
 } from '@/lib/api';
 import { PHOTO_TYPES, photoSchema } from '@/lib/profiles/worker-schema';
-import { ROUTES, workerPublicPath } from '@/lib/routes';
+import { MY_REPUTATION_PATH, ROUTES, workerPublicPath } from '@/lib/routes';
 import { useCurrentUser } from '@/lib/session/use-current-user';
 import { Avatar } from './avatar';
 import { ToggleSwitch } from './toggle-switch';
@@ -206,12 +206,20 @@ export function MyProfile() {
         </div>
       </header>
 
-      <Link
-        href={workerPublicPath(current.id)}
-        className="inline-flex min-h-11 items-center self-start text-[15px] font-bold text-brand underline underline-offset-2"
-      >
-        Ver mi perfil público
-      </Link>
+      <nav aria-label="Mi perfil" className="flex flex-wrap gap-x-5">
+        <Link
+          href={workerPublicPath(current.id)}
+          className="inline-flex min-h-11 items-center text-[15px] font-bold text-brand underline underline-offset-2"
+        >
+          Ver mi perfil público
+        </Link>
+        <Link
+          href={MY_REPUTATION_PATH}
+          className="inline-flex min-h-11 items-center text-[15px] font-bold text-brand underline underline-offset-2"
+        >
+          Ver mi reputación
+        </Link>
+      </nav>
 
       {settingError ? (
         <Alert tone="danger" role="alert">
