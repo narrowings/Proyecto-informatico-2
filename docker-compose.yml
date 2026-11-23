@@ -7,7 +7,8 @@ services:
       POSTGRES_PASSWORD: red
       POSTGRES_DB: red_oportunidades
     ports:
-      - '5432:5432'
+      # Solo en este equipo: en una red compartida nadie más puede conectarse a la base.
+      - '127.0.0.1:5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -17,10 +18,10 @@ services:
       retries: 10
 
   mailpit:
-    image: axllent/mailpit:latest
+    image: axllent/mailpit:v1.33.1
     ports:
-      - '1025:1025' # SMTP
-      - '8025:8025' # interfaz web: http://localhost:8025
+      - '127.0.0.1:1025:1025' # SMTP
+      - '127.0.0.1:8025:8025' # interfaz web: http://localhost:8025
 
 volumes:
   pgdata:
