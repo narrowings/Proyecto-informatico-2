@@ -46,8 +46,13 @@ services:
       NODE_ENV: production
       PORT: 3001
       DATABASE_URL: postgresql://red:${POSTGRES_PASSWORD}@postgres:5432/red_oportunidades?schema=public
-      SMTP_HOST: mailpit
-      SMTP_PORT: 1025
+      # Sin SMTP_HOST en qa.env se usa el Mailpit de QA (ver qa.env.example).
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-}
       WEB_URL: ${WEB_URL:?Falta WEB_URL en qa.env}
       JWT_SECRET: ${JWT_SECRET:?Falta JWT_SECRET en qa.env (mínimo 32 caracteres)}
       RUN_SEED: ${RUN_SEED:-true}

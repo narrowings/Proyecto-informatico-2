@@ -145,6 +145,26 @@ describe('IdentityService.register', () => {
 
     await expect(ctx.service.register(dto, '10.0.0.1')).resolves.toMatchObject({ id: 'u1' });
   });
+
+  it('si falla el SMTP el log solo lleva el código, nunca el enlace ni el correo', async () => {
+    ctx.mailer.send.mockImplementation(async ({ link }: { link: string }) => {
+      throw Object.assign(new Error(`550 rechazado <ana@correo.com> ${link}`), {
+        code: 'EENVELOPE',
+        response: `550 <ana@correo.com> ${link}`,
+      });
+    });
+    const error = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+    await ctx.service.register(dto, '10.0.0.1');
+
+    const link: string = ctx.mailer.send.mock.calls[0][0].link;
+    const token = new URL(link).searchParams.get('token') as string;
+    const written = JSON.stringify(error.mock.calls);
+    expect(error).toHaveBeenCalledOnce();
+    expect(written).toContain('EENVELOPE');
+    expect(written).not.toContain(token);
+    expect(written).not.toContain('ana@correo.com');
+  });
 });
 
 describe('IdentityService.confirmEmail', () => {

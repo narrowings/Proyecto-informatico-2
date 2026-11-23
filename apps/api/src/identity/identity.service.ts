@@ -10,6 +10,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { AccountStatus, LegalDocumentType, Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
+import { mailErrorCode } from '../common/mail/pending-mail';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfirmationMailer } from './confirmation-mailer';
 import type { ConsentsDto, LegalVersionsDto, RegisterDto } from './dto/register.dto';
@@ -228,7 +229,8 @@ export class IdentityService {
         link: `${webUrl}/confirmar-correo?token=${token}`,
       });
     } catch (error) {
-      this.logger.error('No se pudo enviar el correo de confirmación', error as Error);
+      // Solo el código: el mensaje del servidor SMTP puede traer el correo del destinatario.
+      this.logger.error(`No se pudo enviar el correo de confirmación (${mailErrorCode(error)})`);
     }
   }
 }

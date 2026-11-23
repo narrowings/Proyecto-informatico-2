@@ -1,6 +1,8 @@
 import { Injectable, Logger, type Provider } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { logsEmailLinks, maskEmail } from '../common/mail/pending-mail';
+import { logsEmailLinks, maskEmail, sendsRealEmail } from '../common/mail/pending-mail';
+import { MailService } from '../mail/mail.service';
+import { confirmationEmail } from '../mail/templates';
 
 export interface ConfirmationMail {
   to: string;
@@ -8,35 +10,51 @@ export interface ConfirmationMail {
   link: string;
 }
 
-// Puerto de salida del correo de confirmación. T-04 (Santiago López) registra la implementación
-// real con plantillas (Mailpit en local, SES en producción) en confirmationMailerProvider.
+// Puerto de salida del correo de confirmación (HU-001). La implementación se elige en
+// confirmationMailerProvider.
 export abstract class ConfirmationMailer {
   abstract send(mail: ConfirmationMail): Promise<void>;
 }
 
-// Solo en desarrollo: escribe el enlace en el log para poder confirmar cuentas sin correo.
+// T-04: envío real por SMTP. No captura errores: IdentityService decide qué registrar.
+@Injectable()
+export class SmtpConfirmationMailer extends ConfirmationMailer {
+  constructor(private readonly mail: MailService) {
+    super();
+  }
+
+  send({ to, name, link }: ConfirmationMail) {
+    return this.mail.send({ to, ...confirmationEmail({ name, link }) });
+  }
+}
+
+// Sin SMTP, solo en desarrollo: escribe el enlace en el log para poder confirmar cuentas.
 @Injectable()
 export class LoggerConfirmationMailer extends ConfirmationMailer {
   private readonly logger = new Logger('ConfirmationMailer');
 
   async send({ link }: ConfirmationMail) {
-    this.logger.warn(`Correo de confirmación sin enviar (T-04 pendiente). Enlace: ${link}`);
+    this.logger.warn(`Correo de confirmación sin enviar (sin SMTP_HOST). Enlace: ${link}`);
   }
 }
 
-// QA y producción mientras llega T-04: deja constancia sin el enlace ni el correo completo.
+// Sin SMTP fuera de desarrollo: deja constancia sin el enlace ni el correo completo.
 @Injectable()
 export class RedactedConfirmationMailer extends ConfirmationMailer {
   private readonly logger = new Logger('ConfirmationMailer');
 
   async send({ to }: ConfirmationMail) {
-    this.logger.warn(`Correo de confirmación sin enviar a ${maskEmail(to)} (T-04 pendiente)`);
+    this.logger.warn(`Correo de confirmación sin enviar a ${maskEmail(to)} (sin SMTP_HOST)`);
   }
 }
 
 export const confirmationMailerProvider: Provider = {
   provide: ConfirmationMailer,
-  inject: [ConfigService],
-  useFactory: (config: ConfigService) =>
-    logsEmailLinks(config) ? new LoggerConfirmationMailer() : new RedactedConfirmationMailer(),
+  inject: [ConfigService, MailService],
+  useFactory: (config: ConfigService, mail: MailService) => {
+    if (sendsRealEmail(config)) return new SmtpConfirmationMailer(mail);
+    return logsEmailLinks(config)
+      ? new LoggerConfirmationMailer()
+      : new RedactedConfirmationMailer();
+  },
 };
