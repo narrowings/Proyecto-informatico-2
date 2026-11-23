@@ -11,3 +11,12 @@ onlyBuiltDependencies:
   - esbuild
   - prisma
   - sharp
+
+# Parches de seguridad en dependencias transitivas (pnpm audit). Quitar cada uno cuando el paquete
+# que lo trae publique una versión con la corrección.
+overrides:
+  # next 15.5.x trae postcss 8.4.31 (GHSA: lectura de archivos, path traversal y XSS).
+  postcss: '>=8.5.33 <9'
+  # @prisma/config (CLI de Prisma): ReDoS y agotamiento de pila; solo en compilación.
+  effect: '>=3.22.1 <4'
+  deepmerge-ts: '>=8.0.0 <9'
