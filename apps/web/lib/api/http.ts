@@ -13,7 +13,19 @@ export class ApiError extends Error {
   }
 }
 
-export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+/** Cómo leer una respuesta exitosa: JSON por defecto; `asBlob` para archivos. */
+type ParseBody<T> = (response: Response) => Promise<T>;
+
+const asJson = <T>(response: Response): Promise<T> =>
+  response.status === 204 ? Promise.resolve(undefined as T) : response.json();
+
+export const asBlob: ParseBody<Blob> = (response) => response.blob();
+
+export async function request<T>(
+  path: string,
+  options: RequestInit = {},
+  parse: ParseBody<T> = asJson,
+): Promise<T> {
   const response = await fetch(`${API_ORIGIN}/v1${path}`, {
     credentials: 'include',
     cache: 'no-store',
@@ -23,7 +35,7 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
     const problem: ApiProblem = await response.json().catch(() => ({}));
     throw new ApiError(response.status, problem, Number(response.headers.get('retry-after-ip')));
   }
-  return response.status === 204 ? (undefined as T) : response.json();
+  return parse(response);
 }
 
 export const postJson = (body: object): RequestInit => ({
@@ -84,11 +96,15 @@ function renew(): Promise<string> {
   return refreshing;
 }
 
-export async function authenticated<T>(path: string, options: RequestInit = {}): Promise<T> {
+export async function authenticated<T>(
+  path: string,
+  options: RequestInit = {},
+  parse: ParseBody<T> = asJson,
+): Promise<T> {
   const send = (token: string) => {
     const headers = new Headers(options.headers);
     headers.set('Authorization', `Bearer ${token}`);
-    return request<T>(path, { ...options, headers });
+    return request<T>(path, { ...options, headers }, parse);
   };
   const token = accessToken ?? (await renew());
   try {

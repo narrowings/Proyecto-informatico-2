@@ -66,3 +66,8 @@ export const workerProfileSchema = z.object({
 
 export type WorkerProfileFormValues = z.input<typeof workerProfileSchema>;
 export type WorkerProfileFormOutput = z.output<typeof workerProfileSchema>;
+
+/** Edición del perfil (HU-032 CA1): mismas reglas que al crearlo; la foto se cambia aparte. */
+export const workerProfileEditSchema = workerProfileSchema.omit({ photo: true });
+
+export type WorkerProfileEditValues = z.infer<typeof workerProfileEditSchema>;

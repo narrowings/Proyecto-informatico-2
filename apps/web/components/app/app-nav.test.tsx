@@ -18,6 +18,7 @@ describe('AppNav', () => {
       'href',
       ROUTES.activity,
     );
+    expect(screen.getByRole('link', { name: 'Perfil' })).toHaveAttribute('href', ROUTES.myProfile);
   });
 
   it('marca la sección actual', () => {

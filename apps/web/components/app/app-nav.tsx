@@ -47,6 +47,16 @@ const ITEMS = [
     label: 'Actividad',
     icon: icon(<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" />),
   },
+  {
+    href: ROUTES.myProfile,
+    label: 'Perfil',
+    icon: icon(
+      <>
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 21c1-4 4-6 8-6s7 2 8 6" />
+      </>,
+    ),
+  },
 ];
 
 /**

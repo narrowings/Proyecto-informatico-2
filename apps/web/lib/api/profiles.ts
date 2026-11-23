@@ -64,6 +64,46 @@ export type PublicWorkerProfile = {
   reputation: Reputation;
 };
 
+/** Perfil propio (`GET /profiles/worker/me`): incluye la configuración de privacidad. */
+export type OwnWorkerProfile = {
+  id: string;
+  displayName: string;
+  /** Relativa al API; la foto propia se descarga con el token (puede estar oculta). */
+  photoUrl: string;
+  skills: string[];
+  experience: string | null;
+  zoneId: number;
+  zone: { id: number; name: string };
+  categoryIds: number[];
+  categories: { id: number; name: string }[];
+  availability: WorkerAvailability;
+  /** HU-030 CA4: qué datos opcionales se muestran en el perfil público. */
+  showPhoto: boolean;
+  showExperience: boolean;
+};
+
+/** HU-032 y HU-030 CA4: solo los campos que cambian; los demás quedan igual. */
+export type UpdateWorkerProfileRequest = Partial<{
+  displayName: string;
+  skills: string[];
+  /** Vacía la borra. */
+  experience: string;
+  zoneId: number;
+  categoryIds: number[];
+  availability: WorkerAvailability;
+  showPhoto: boolean;
+  showExperience: boolean;
+}>;
+
+export type UpdateWorkerProfileResult =
+  | { ok: true; profile: OwnWorkerProfile }
+  /** Errores por campo que devuelve el API (400), ya en español. */
+  | { ok: false; errors: Record<string, string[]> };
+
+export type ReplacePhotoResult =
+  | { ok: true; profile: OwnWorkerProfile }
+  | { ok: false; reason: 'too_large' | 'invalid'; message?: string };
+
 export type CreatePublisherProfileResult =
   | { ok: true; profile: { id: string } }
   | { ok: false; reason: 'already_exists'; id: string }
@@ -77,4 +117,10 @@ export type ProfilesApi = {
   getPublicPublisherProfile(id: string): Promise<PublicPublisherProfile | null>;
   /** `null` si no existe (o el id no es válido). */
   getPublicWorkerProfile(id: string): Promise<PublicWorkerProfile | null>;
+  /** `null` si todavía no tiene perfil de trabajador. */
+  getOwnWorkerProfile(): Promise<OwnWorkerProfile | null>;
+  updateWorkerProfile(changes: UpdateWorkerProfileRequest): Promise<UpdateWorkerProfileResult>;
+  replaceWorkerPhoto(photo: File): Promise<ReplacePhotoResult>;
+  /** La foto propia aunque esté oculta: un `<img>` directo daría 404. */
+  getOwnWorkerPhoto(): Promise<Blob>;
 };

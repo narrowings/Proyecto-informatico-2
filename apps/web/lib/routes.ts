@@ -7,6 +7,8 @@ export const ROUTES = {
   publish: '/publicar',
   /** "Mi actividad" (HU-013). */
   activity: '/mi-actividad',
+  /** "Mi perfil": editar, disponibilidad y privacidad (HU-032, HU-030). */
+  myProfile: '/perfil',
   /** Crear el perfil de trabajador (HU-002). */
   workerProfile: '/perfil/trabajador',
   /** Crear el perfil de publicador o empresa (HU-008, pantalla de Diego Quintero). */
