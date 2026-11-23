@@ -526,6 +526,7 @@ enum NotificationType {
   JOB_COMPLETED
   JOB_CANCELLED
   RATING_AVAILABLE
+  MODERATION_NOTICE // HU-012: aviso al afectado por una acción de moderación, con cómo apelar
 }
 
 model Notification {

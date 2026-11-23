@@ -1,3 +1,6 @@
+-- AlterEnum
+ALTER TYPE "NotificationType" ADD VALUE 'MODERATION_NOTICE';
+
 -- CreateEnum
 CREATE TYPE "ReportTargetType" AS ENUM ('OPPORTUNITY', 'USER');
 

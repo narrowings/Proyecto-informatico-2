@@ -58,11 +58,15 @@ describe('HU-018 Recuperación de contraseña', () => {
     });
   });
 
-  it('un correo inexistente o suspendido no recibe un enlace', async () => {
+  it('un correo inexistente, suspendido o bloqueado no recibe un enlace', async () => {
     const { service, tx, email } = setup();
-    tx.user.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ status: 'SUSPENDED' });
+    tx.user.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ status: 'SUSPENDED' })
+      .mockResolvedValueOnce({ status: 'BLOCKED' });
     await service.sendResetLink('nadie@example.com');
     await service.sendResetLink('suspendida@example.com');
+    await service.sendResetLink('bloqueada@example.com');
     expect(email.send).not.toHaveBeenCalled();
     expect(tx.passwordResetToken.create).not.toHaveBeenCalled();
   });

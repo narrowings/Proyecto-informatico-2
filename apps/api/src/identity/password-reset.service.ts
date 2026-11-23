@@ -43,7 +43,8 @@ export class PasswordResetService {
         where: { email },
         select: { id: true, email: true, name: true, status: true },
       });
-      if (!account || account.status === 'SUSPENDED') return null;
+      // Una cuenta suspendida o bloqueada por moderación no recupera el acceso por esta vía (HU-012).
+      if (!account || account.status === 'SUSPENDED' || account.status === 'BLOCKED') return null;
       const now = new Date();
       await tx.passwordResetToken.updateMany({
         where: { userId: account.id, usedAt: null },
