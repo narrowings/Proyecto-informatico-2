@@ -43,6 +43,31 @@ export const loginSchema = z.object({
 
 export type LoginFormValues = z.infer<typeof loginSchema>;
 
+/** "Olvidé mi contraseña" (HU-018 CA1). */
+export const forgotPasswordSchema = registerSchema.pick({ email: true });
+
+export type ForgotPasswordFormValues = z.infer<typeof forgotPasswordSchema>;
+
+/** Límite del API para la contraseña. */
+export const MAX_PASSWORD_LENGTH = 128;
+
+/** Nueva contraseña (HU-018 CA2 y CA4): misma política que el registro y debe coincidir. */
+export const resetPasswordSchema = z
+  .object({
+    password: z
+      .string()
+      .min(1, 'Ingresa una contraseña nueva.')
+      .max(MAX_PASSWORD_LENGTH, `La contraseña admite máximo ${MAX_PASSWORD_LENGTH} caracteres.`)
+      .refine(isStrongPassword, PASSWORD_ERROR),
+    passwordConfirmation: z.string().min(1, 'Confirma la contraseña nueva.'),
+  })
+  .refine((values) => values.password === values.passwordConfirmation, {
+    path: ['passwordConfirmation'],
+    message: 'Las contraseñas no coinciden.',
+  });
+
+export type ResetPasswordFormValues = z.infer<typeof resetPasswordSchema>;
+
 /** Aceptación de nuevas versiones de los documentos legales (HU-017 CA4). */
 export const acceptTermsSchema = registerSchema.pick({
   termsAccepted: true,

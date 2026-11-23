@@ -1,4 +1,4 @@
-import type { AuthApi, LegalDocuments } from './auth';
+import type { AuthApi, LegalDocuments, RateLimited } from './auth';
 import { ApiError, authenticated, loginSession, logoutSession, postJson, request } from './http';
 
 export const authApi: AuthApi = {
@@ -68,4 +68,36 @@ export const authApi: AuthApi = {
   async acceptTerms(consents) {
     await authenticated('/auth/consents', postJson(consents));
   },
+  async forgotPassword(email) {
+    try {
+      await request('/auth/forgot-password', { ...postJson({ email }), credentials: 'omit' });
+      return { status: 'sent' };
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 429) return rateLimited(error);
+      throw error;
+    }
+  },
+  async resetPassword(values) {
+    try {
+      await request('/auth/reset-password', { ...postJson(values), credentials: 'omit' });
+      return { status: 'ok' };
+    } catch (error) {
+      if (error instanceof ApiError) {
+        if (error.status === 410) return { status: 'expired' };
+        if (error.status === 400 && error.problem.errors)
+          return { status: 'invalid', errors: error.problem.errors };
+        if (error.status === 429) return rateLimited(error);
+      }
+      throw error;
+    }
+  },
 };
+
+/** Ventana de los límites de intentos del API (15 minutos). */
+const RATE_LIMIT_WINDOW_SECONDS = 15 * 60;
+
+// Retry-After-ip puede faltar si el límite que se alcanzó es el del correo: se usa la ventana.
+function rateLimited(error: ApiError): RateLimited {
+  const seconds = error.retryAfter > 0 ? error.retryAfter : RATE_LIMIT_WINDOW_SECONDS;
+  return { status: 'rate_limited', retryAfterMinutes: Math.max(1, Math.ceil(seconds / 60)) };
+}
