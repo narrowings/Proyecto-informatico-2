@@ -5,6 +5,9 @@ export { catalogsApi } from './catalogs.http';
 
 export type * from './auth';
 export type * from './catalogs';
+export { ratingsApi } from './ratings.http';
+
 export type * from './profiles';
+export type * from './ratings';
 export type * from './reputation';
 export type * from './session';
