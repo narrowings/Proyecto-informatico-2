@@ -39,8 +39,9 @@ export class OpportunitiesController {
 
   // HU-009 y HU-010: feed con búsqueda y filtros. Público, como el perfil público del publicador.
   @Get()
-  list(@Query() query: ListOpportunitiesQuery) {
-    return this.opportunities.listFeed(query);
+  // Con sesión (opcional), no muestra lo que el propio usuario reportó (RF-04-06).
+  list(@Query() query: ListOpportunitiesQuery, @CurrentUser() viewer?: AuthUser) {
+    return this.opportunities.listFeed(query, new Date(), viewer?.id);
   }
 
   // HU-023 CA1. Va antes de :id para que "mine" no se lea como id.

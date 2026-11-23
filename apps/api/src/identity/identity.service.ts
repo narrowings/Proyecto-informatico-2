@@ -210,6 +210,66 @@ export class IdentityService {
     });
   }
 
+  // AdminGuard (HU-012 CA2): rol y estado leídos de la base en cada petición.
+  getAccess(userId: string) {
+    return this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, status: true },
+    });
+  }
+
+  // HU-012 CA3: búsqueda de usuarios para el panel de administración (por nombre o correo).
+  // Solo la usa el módulo de moderación detrás de AdminGuard: por eso incluye el correo.
+  async searchUsers({
+    q,
+    status,
+    page,
+    pageSize,
+  }: {
+    q?: string;
+    status?: AccountStatus;
+    page: number;
+    pageSize: number;
+  }) {
+    const text = q?.trim();
+    const where: Prisma.UserWhereInput = {
+      ...(status && { status }),
+      ...(text && {
+        OR: [
+          { name: { contains: text, mode: 'insensitive' } },
+          { email: { contains: text.toLowerCase() } },
+        ],
+      }),
+    };
+    const [total, items] = await this.prisma.$transaction([
+      this.prisma.user.count({ where }),
+      this.prisma.user.findMany({
+        where,
+        select: { id: true, name: true, email: true, status: true, role: true, createdAt: true },
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+    return { items, total, page, pageSize };
+  }
+
+  // HU-012 CA1/CA3: suspender, bloquear o reactivar. Condicional al estado anterior para que dos
+  // administradores a la vez no se pisen; devuelve false si el estado ya no era `from`.
+  // No toca sesiones ni auditoría: lo hace el módulo de moderación (revoca sesiones y registra).
+  async setAccountStatus(
+    userId: string,
+    from: AccountStatus[],
+    to: AccountStatus,
+    tx: Prisma.TransactionClient = this.prisma,
+  ) {
+    const { count } = await tx.user.updateMany({
+      where: { id: userId, status: { in: from } },
+      data: { status: to },
+    });
+    return count === 1;
+  }
+
   // RF-01-05: otros módulos consultan el estado de la cuenta por aquí, nunca leen la tabla users.
   async isAccountActive(userId: string) {
     const user = await this.prisma.user.findUnique({

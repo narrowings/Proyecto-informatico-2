@@ -16,7 +16,8 @@ datasource db {
 enum AccountStatus {
   PENDING_CONFIRMATION // HU-001 CA1: no puede postularse ni publicar
   ACTIVE
-  SUSPENDED // HU-012: bloqueo por moderación
+  SUSPENDED // HU-012 CA3: suspensión temporal por un administrador (se puede reactivar)
+  BLOCKED // HU-012 CA1/CA3: bloqueo por moderación (se puede reactivar con apelación, HU-036)
 }
 
 enum UserRole {
@@ -47,6 +48,7 @@ model User {
   ratingsReceived    Rating[]                 @relation("rating_ratee")
   reputations        ReputationSummary[]
   notifications      Notification[]
+  reports            Report[]
 
   @@map("users")
 }
@@ -320,7 +322,12 @@ model Opportunity {
   // RF-04-08: título, descripción y categoría en minúsculas y sin tildes; lo mantiene OpportunitiesService.
   searchText String @default("") @map("search_text") @db.Text
 
-  statusReason String?   @map("status_reason") @db.VarChar(500) // HU-023 CA3: motivo al pausar, cerrar o cancelar
+  statusReason String? @map("status_reason") @db.VarChar(500) // HU-023 CA3: motivo al pausar, cerrar o cancelar
+
+  // HU-012 CA1: oculta por moderación. Sale del feed, del detalle público y de las postulaciones
+  // sin cambiar su estado, para poder revertirlo. El motivo es interno (no se muestra en público).
+  hiddenAt     DateTime? @map("hidden_at")
+  hiddenReason String?   @map("hidden_reason") @db.VarChar(500)
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
   closedAt     DateTime? @map("closed_at")
@@ -519,6 +526,7 @@ enum NotificationType {
   JOB_COMPLETED
   JOB_CANCELLED
   RATING_AVAILABLE
+  MODERATION_NOTICE // HU-012: aviso al afectado por una acción de moderación, con cómo apelar
 }
 
 model Notification {
@@ -537,4 +545,87 @@ model Notification {
 
   @@index([userId, readAt, createdAt])
   @@map("notifications")
+}
+
+// ─── reports (EP-09, Sprint 4) ───────────────────────────────────────────────
+// Dueño: módulo reports. HU-019: reportes de publicaciones y usuarios (el chat está fuera del MVP).
+
+enum ReportTargetType {
+  OPPORTUNITY
+  USER
+}
+
+// RF-09-05: fraude, contenido inapropiado, spam u otro (este último exige descripción).
+enum ReportReason {
+  FRAUD
+  INAPPROPRIATE
+  SPAM
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING // en la cola del administrador
+  ACTIONED // se ocultó la publicación o se bloqueó al usuario
+  DISMISSED // revisado sin acción
+}
+
+model Report {
+  id             String           @id @default(uuid()) @db.Uuid
+  reporterUserId String           @map("reporter_user_id") @db.Uuid
+  targetType     ReportTargetType @map("target_type")
+  targetId       String           @map("target_id") @db.Uuid
+  reason         ReportReason
+  description    String?          @db.VarChar(1000) // obligatoria con OTHER (HU-019 CA3)
+  status         ReportStatus     @default(PENDING)
+  resolution     String?          @db.VarChar(500) // motivo de la decisión del administrador
+  resolvedById   String?          @map("resolved_by_id") @db.Uuid
+  resolvedAt     DateTime?        @map("resolved_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+
+  reporter User @relation(fields: [reporterUserId], references: [id], onDelete: Cascade)
+
+  // HU-019 CA4 / RF-09-06: una persona reporta una sola vez el mismo elemento.
+  @@unique([reporterUserId, targetType, targetId])
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+  @@map("reports")
+}
+
+// ─── audit (EP-09, Sprint 4) ─────────────────────────────────────────────────
+// Dueño: módulo audit. HU-038: solo inserción; la migración agrega un trigger que rechaza UPDATE,
+// DELETE y TRUNCATE (CA3, RN-25). Los demás módulos registran con AuditService (token AUDIT).
+
+// RF-09-11: eventos críticos que se registran automáticamente.
+enum AuditAction {
+  ADMIN_LOGIN
+  ADMIN_ACCESS_DENIED
+  USER_SUSPENDED
+  USER_BLOCKED
+  USER_REACTIVATED
+  OPPORTUNITY_HIDDEN
+  OPPORTUNITY_UNHIDDEN
+  REPORT_DISMISSED
+  CATEGORY_CREATED
+  CATEGORY_UPDATED
+  LABOR_RULE_UPDATED
+  TERMS_ACCEPTED
+  AGREEMENT_ACCEPTED
+}
+
+model AuditLog {
+  id          String      @id @default(uuid()) @db.Uuid
+  // Sin llave foránea: el registro sobrevive aunque cambie o se anonimice la cuenta.
+  actorUserId String?     @map("actor_user_id") @db.Uuid
+  action      AuditAction
+  targetType  String?     @map("target_type") @db.VarChar(40)
+  targetId    String?     @map("target_id") @db.VarChar(64)
+  reason      String?     @db.VarChar(500)
+  ip          String?     @db.VarChar(45)
+  data        Json        @default("{}")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_logs")
 }
