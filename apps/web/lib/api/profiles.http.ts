@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { ApiError, API_ORIGIN, authenticated, request } from './http';
-import type { ProfilesApi, PublicPublisherProfile, WorkerProfile } from './profiles';
+import type {
+  ProfilesApi,
+  PublicPublisherProfile,
+  PublicWorkerProfile,
+  WorkerProfile,
+} from './profiles';
 
 export const profilesApi: ProfilesApi = {
   async createWorkerProfile({ photo, ...details }) {
@@ -67,4 +72,22 @@ export const profilesApi: ProfilesApi = {
       throw error;
     }
   },
+  async getPublicWorkerProfile(id) {
+    if (!z.uuid().safeParse(id).success) return null;
+    try {
+      const profile = await request<PublicWorkerProfile>(
+        `/profiles/worker/${encodeURIComponent(id)}`,
+        { credentials: 'omit' },
+      );
+      return { ...profile, photoUrl: absolutePhotoUrl(profile.photoUrl) };
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return null;
+      throw error;
+    }
+  },
 };
+
+/** El API devuelve rutas relativas; `null` significa foto oculta (HU-030). */
+export function absolutePhotoUrl(photoUrl: string | null): string | null {
+  return photoUrl ? new URL(photoUrl, API_ORIGIN).href : null;
+}

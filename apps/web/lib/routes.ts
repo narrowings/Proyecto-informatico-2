@@ -25,3 +25,6 @@ export const ROUTES = {
   privacy: '/privacidad',
   dataProcessing: '/tratamiento-datos',
 } as const;
+
+/** Perfil público de un trabajador (HU-029). */
+export const workerPublicPath = (id: string) => `/trabajadores/${encodeURIComponent(id)}`;

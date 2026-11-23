@@ -15,7 +15,12 @@ const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'scroll', 'touchstart'] as co
  */
 export function AppSessionGuard() {
   const pathname = usePathname();
-  return pathname.startsWith('/publicadores/') ? null : <SessionGuard />;
+  return isPublicPath(pathname) ? null : <SessionGuard />;
+}
+
+/** Perfiles públicos de publicadores y trabajadores: se ven sin sesión. */
+export function isPublicPath(pathname: string): boolean {
+  return pathname.startsWith('/publicadores/') || pathname.startsWith('/trabajadores/');
 }
 
 export function SessionGuard({ timeoutMs = getInactivityTimeoutMs() }: { timeoutMs?: number }) {
