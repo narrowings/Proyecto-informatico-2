@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import { ComingSoon } from '@/components/app/coming-soon';
 import { RequireProfile } from '@/components/app/require-profile';
+import { PublishFlow } from '@/components/opportunities/publish-flow';
 
 export const metadata: Metadata = {
   title: 'Publicar | Red de Oportunidades Laborales Cali',
@@ -10,9 +10,7 @@ export const metadata: Metadata = {
 export default function PublicarPage() {
   return (
     <RequireProfile profile="publisher">
-      <ComingSoon title="Publicar una necesidad">
-        Aquí podrás crear una oportunidad (HU-003, HU-024 y HU-025).
-      </ComingSoon>
+      <PublishFlow />
     </RequireProfile>
   );
 }
