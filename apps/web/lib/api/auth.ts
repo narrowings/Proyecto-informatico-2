@@ -53,4 +53,27 @@ export type AuthApi = {
   logout(): Promise<void>;
   /** Registra la aceptación de las nuevas versiones de los documentos (HU-017 CA4). */
   acceptTerms(consents: LegalConsents): Promise<void>;
+  /** Pide el enlace de restablecimiento (HU-018 CA1). No revela si el correo existe. */
+  forgotPassword(email: string): Promise<ForgotPasswordResult>;
+  /** Cambia la contraseña con el enlace del correo (HU-018 CA2–CA4). */
+  resetPassword(request: ResetPasswordRequest): Promise<ResetPasswordResult>;
 };
+
+/** Demasiados intentos (429): minutos que hay que esperar. */
+export type RateLimited = { status: 'rate_limited'; retryAfterMinutes: number };
+
+export type ForgotPasswordResult = { status: 'sent' } | RateLimited;
+
+export type ResetPasswordRequest = {
+  token: string;
+  password: string;
+  passwordConfirmation: string;
+};
+
+export type ResetPasswordResult =
+  | { status: 'ok' }
+  /** Enlace vencido (30 minutos) o ya usado (HU-018 CA3). */
+  | { status: 'expired' }
+  /** Errores por campo que devuelve el API, ya en español. */
+  | { status: 'invalid'; errors: Record<string, string[]> }
+  | RateLimited;

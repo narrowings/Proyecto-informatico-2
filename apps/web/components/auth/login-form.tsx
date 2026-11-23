@@ -21,7 +21,14 @@ type Problem =
 type Resend = 'idle' | 'sending' | 'sent' | 'failed';
 
 /** Inicio de sesión (HU-021). */
-export function LoginForm({ sessionExpired = false }: { sessionExpired?: boolean }) {
+export function LoginForm({
+  sessionExpired = false,
+  passwordReset = false,
+}: {
+  sessionExpired?: boolean;
+  /** Viene de restablecer la contraseña (HU-018 CA2). */
+  passwordReset?: boolean;
+}) {
   const router = useRouter();
   const [problem, setProblem] = useState<Problem | null>(null);
   const [resend, setResend] = useState<Resend>('idle');
@@ -97,6 +104,12 @@ export function LoginForm({ sessionExpired = false }: { sessionExpired?: boolean
         </Alert>
       ) : null}
 
+      {passwordReset ? (
+        <Alert tone="success" role="status">
+          Cambiamos tu contraseña y cerramos tus sesiones abiertas. Inicia sesión con la nueva.
+        </Alert>
+      ) : null}
+
       <Field
         label="Correo electrónico"
         type="email"
@@ -114,6 +127,12 @@ export function LoginForm({ sessionExpired = false }: { sessionExpired?: boolean
         error={errors.password?.message}
         {...register('password')}
       />
+      <Link
+        href={ROUTES.forgotPassword}
+        className="-my-2 inline-flex min-h-11 items-center self-start text-[15px] font-bold text-brand underline underline-offset-2"
+      >
+        ¿Olvidaste tu contraseña?
+      </Link>
 
       {problem?.kind === 'invalid' ? (
         <Alert tone="danger" role="alert">

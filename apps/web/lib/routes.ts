@@ -15,6 +15,10 @@ export const ROUTES = {
   registerPending: '/registro/pendiente',
   confirmEmail: '/confirmar-correo',
   login: '/iniciar-sesion',
+  /** "Olvidé mi contraseña" (HU-018). */
+  forgotPassword: '/olvide-contrasena',
+  /** Enlace del correo de recuperación: la ruta es obligatoria tal cual (HU-018). */
+  resetPassword: '/restablecer-contrasena',
   /** Aceptación de nuevas versiones de términos y política al iniciar sesión (HU-017 CA4). */
   acceptTerms: '/aceptar-terminos',
   terms: '/terminos',
