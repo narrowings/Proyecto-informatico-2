@@ -53,6 +53,8 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-}
+      # HU-012: correo para apelaciones de moderación (si falta, se usa MAIL_FROM).
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-}
       WEB_URL: ${WEB_URL:?Falta WEB_URL en qa.env}
       JWT_SECRET: ${JWT_SECRET:?Falta JWT_SECRET en qa.env (mínimo 32 caracteres)}
       RUN_SEED: ${RUN_SEED:-true}
