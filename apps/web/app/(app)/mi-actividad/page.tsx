@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
-import { LogoutButton } from '@/components/auth/logout-button';
-import { ComingSoon } from '@/components/app/coming-soon';
+import { ActivityDashboard } from '@/components/activity/activity-dashboard';
 import { RequireProfile } from '@/components/app/require-profile';
 
 export const metadata: Metadata = {
@@ -11,10 +10,7 @@ export const metadata: Metadata = {
 export default function MiActividadPage() {
   return (
     <RequireProfile profile="none">
-      <ComingSoon title="Mi actividad">
-        Aquí verás tus postulaciones, publicaciones, acuerdos y reputación (HU-013).
-      </ComingSoon>
-      <LogoutButton />
+      <ActivityDashboard />
     </RequireProfile>
   );
 }

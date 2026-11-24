@@ -39,3 +39,9 @@ export const rateJobPath = (jobId: string) =>
 
 /** Mi reputación (HU-046, HU-013 CA3). */
 export const MY_REPUTATION_PATH = '/mi-actividad/reputacion';
+
+export const jobDetailPath = (id: string) => `/mi-actividad/trabajos/${encodeURIComponent(id)}`;
+export const selectionDetailPath = (id: string) =>
+  `/mi-actividad/selecciones/${encodeURIComponent(id)}`;
+export const publicationPath = (id: string) =>
+  `/mi-actividad/publicaciones/${encodeURIComponent(id)}`;

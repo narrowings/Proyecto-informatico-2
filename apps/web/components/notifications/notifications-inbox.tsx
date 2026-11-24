@@ -1,134 +1,96 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Alert } from '@/components/ui/alert';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { notificationsApi, type NotificationItem, type NotificationsPage } from '@/lib/api';
+import { notificationsApi, type NotificationsPage, type NotificationItem } from '@/lib/api';
 import { isInternalPath } from '@/lib/internal-path';
+import { formatDate } from '@/lib/format';
+import { heading, Resource, Problem, useAction } from '@/components/activity/activity-ui';
+import { inboxChanged } from './notification-bell';
 
-const relativeDate = (value: string) => {
-  const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60_000));
-  if (minutes < 1) return 'Ahora mismo';
+const firstPage = () => notificationsApi.list(1);
+function relativeDate(iso: string) {
+  const minutes = Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 60000));
+  if (minutes < 1) return 'Ahora';
   if (minutes < 60) return `Hace ${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  return hours < 24 ? `Hace ${hours} h` : `Hace ${Math.floor(hours / 24)} días`;
-};
-
+  if (minutes < 1440) return `Hace ${Math.floor(minutes / 60)} h`;
+  return formatDate(iso);
+}
 export function NotificationsInbox() {
-  const router = useRouter();
-  const [page, setPage] = useState<NotificationsPage>();
-  const [items, setItems] = useState<NotificationItem[]>([]);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [notice, setNotice] = useState<string>();
-  const load = (number = 1) =>
-    notificationsApi.list(number).then((data) => {
-      setPage(data);
-      setItems((current) => (number === 1 ? data.items : [...current, ...data.items]));
-      setStatus('ready');
-    });
-  useEffect(() => {
-    void load().catch(() => setStatus('error'));
-  }, []);
-  const refreshBell = () => window.dispatchEvent(new Event('red:notifications'));
-  async function read(item: NotificationItem) {
-    try {
-      const result = item.read ? { link: item.link } : await notificationsApi.markAsRead(item.id);
-      if (!item.read) {
-        setItems((all) =>
-          all.map((current) => (current.id === item.id ? { ...current, read: true } : current)),
-        );
-        refreshBell();
-      }
-      if (isInternalPath(result.link)) router.push(result.link);
-    } catch {
-      setNotice('No pudimos abrir la notificación. Inténtalo de nuevo.');
-    }
-  }
-  if (status === 'loading')
-    return (
-      <p role="status" className="text-muted">
-        Cargando notificaciones…
-      </p>
-    );
-  if (status === 'error')
-    return (
-      <Alert tone="danger" role="alert">
-        No pudimos cargar las notificaciones.{' '}
-        <button
-          className="underline"
-          onClick={() => {
-            setStatus('loading');
-            void load().catch(() => setStatus('error'));
-          }}
-        >
-          Reintentar
-        </button>
-      </Alert>
-    );
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="font-display text-3xl font-bold">Notificaciones</h1>
-        <Button
-          variant="secondary"
-          onClick={() =>
-            void notificationsApi
-              .markAllAsRead()
-              .then(() => {
-                setNotice(undefined);
-                setItems((all) => all.map((item) => ({ ...item, read: true })));
-                refreshBell();
-              })
-              .catch(() => setNotice('No pudimos marcar las notificaciones. Inténtalo de nuevo.'))
-          }
-        >
-          Marcar todas
-        </Button>
-      </div>
-      {notice ? (
-        <Alert tone="danger" role="alert">
-          {notice}
-        </Alert>
-      ) : null}
-      {items.length === 0 ? (
-        <p className="text-muted">No tienes notificaciones todavía.</p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {items.map((item) => (
-            <li key={item.id}>
-              <button
-                className={`min-h-11 w-full rounded-card border p-4 text-left ${item.read ? 'border-line bg-white' : 'border-brand bg-brand-soft'}`}
-                onClick={() => void read(item)}
-              >
-                <div className="flex justify-between gap-3">
+    <section className="flex flex-col gap-4">
+      <h1 className={heading}>Notificaciones</h1>
+      <Resource load={firstPage}>{(data) => <Inbox initial={data} />}</Resource>
+    </section>
+  );
+}
+function Inbox({ initial }: { initial: NotificationsPage }) {
+  const router = useRouter();
+  const [items, setItems] = useState(initial.items);
+  const [unread, setUnread] = useState(initial.unread);
+  const [page, setPage] = useState(initial.page);
+  const [total, setTotal] = useState(initial.total);
+  const { run, busy, error } = useAction();
+  async function more() {
+    const next = await notificationsApi.list(page + 1);
+    setItems((previous) => {
+      const ids = new Set(previous.map((i) => i.id));
+      return [...previous, ...next.items.filter((i) => !ids.has(i.id))];
+    });
+    setPage(next.page);
+    setTotal(next.total);
+    setUnread(next.unread);
+  }
+  async function open(item: NotificationItem) {
+    const { link } = item.read ? { link: item.link } : await notificationsApi.markAsRead(item.id);
+    setItems((previous) => previous.map((i) => (i.id === item.id ? { ...i, read: true } : i)));
+    if (!item.read) setUnread((n) => Math.max(n - 1, 0));
+    window.dispatchEvent(new Event(inboxChanged));
+    if (link && isInternalPath(link)) router.push(link);
+  }
+  async function markAll() {
+    await notificationsApi.markAllAsRead();
+    setItems((previous) => previous.map((i) => ({ ...i, read: true })));
+    setUnread(0);
+    window.dispatchEvent(new Event(inboxChanged));
+  }
+  return (
+    <>
+      {items.length > 0 ? (
+        <>
+          <Button variant="secondary" disabled={busy || unread === 0} onClick={() => run(markAll)}>
+            Marcar todas
+          </Button>
+          <ul className="flex flex-col gap-2">
+            {items.map((item) => (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => run(() => open(item))}
+                  className={`flex min-h-11 w-full flex-col gap-1 rounded-field border border-line p-4 text-left break-words focus-visible:outline-3 focus-visible:outline-brand ${item.read ? 'bg-white' : 'bg-brand-soft'}`}
+                >
+                  <span className="text-xs font-bold text-muted">
+                    {item.read ? 'Leída' : 'Sin leer'} ·{' '}
+                    <time dateTime={item.createdAt}>{relativeDate(item.createdAt)}</time>
+                  </span>
                   <strong>{item.title}</strong>
-                  <time className="shrink-0 text-xs text-muted">
-                    {relativeDate(item.createdAt)}
-                  </time>
-                </div>
-                <p className="mt-1 text-sm">{item.body}</p>
-              </button>
-            </li>
-          ))}
-        </ul>
+                  <span>{item.body}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <p>No tienes notificaciones todavía.</p>
       )}
-      {page && items.length < page.total ? (
-        <Button
-          variant="secondary"
-          aria-disabled={loadingMore}
-          onClick={() => {
-            if (loadingMore) return;
-            setLoadingMore(true);
-            void load(page.page + 1)
-              .catch(() => setNotice('No pudimos cargar más notificaciones.'))
-              .finally(() => setLoadingMore(false));
-          }}
-        >
-          {loadingMore ? 'Cargando…' : 'Cargar más'}
+      {items.length < total && (
+        <Button variant="secondary" disabled={busy} onClick={() => run(more)}>
+          Cargar más
         </Button>
-      ) : null}
-    </div>
+      )}
+      {error ? <Problem error={error} /> : null}
+    </>
   );
 }

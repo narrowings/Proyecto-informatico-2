@@ -87,7 +87,7 @@ describe('HU-014 CA5 Bandeja de notificaciones', () => {
 
     markAllAsRead.mockRejectedValueOnce(new Error('red'));
     await userEvent.click(screen.getByRole('button', { name: 'Marcar todas' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('No pudimos marcar');
+    expect(await screen.findByRole('alert')).toHaveTextContent('No pudimos completar');
     expect(screen.getByText('Aviso a')).toBeInTheDocument();
   });
 });

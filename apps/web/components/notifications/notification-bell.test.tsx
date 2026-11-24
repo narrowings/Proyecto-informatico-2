@@ -1,53 +1,44 @@
 import { act, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { NotificationBell } from './notification-bell';
-
-const unreadCount = vi.fn();
-const getCurrentUser = vi.fn();
-vi.mock('@/lib/api', () => ({
-  notificationsApi: { unreadCount: () => unreadCount() },
-  sessionApi: { getCurrentUser: () => getCurrentUser() },
-}));
-
-beforeEach(() => {
-  unreadCount.mockReset();
-  getCurrentUser.mockReset().mockResolvedValue({ id: 'u1', name: 'Ana' });
+import { afterEach, it, vi, expect } from 'vitest';
+import { notificationsApi } from '@/lib/api';
+import * as session from '@/lib/session/use-current-user';
+import { NotificationBell, inboxChanged } from './notification-bell';
+vi.mock('next/navigation', () => ({ usePathname: () => '/mi-actividad' }));
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
 });
-afterEach(() => vi.useRealTimers());
-
-describe('HU-014 Campana de notificaciones', () => {
-  it('sin sesión no se muestra ni consulta', async () => {
-    getCurrentUser.mockResolvedValue(null);
-    const { container } = render(<NotificationBell />);
-    await act(async () => {});
-    expect(container).toBeEmptyDOMElement();
-    expect(unreadCount).not.toHaveBeenCalled();
+it('no consulta las notificaciones cuando falta sesión', () => {
+  vi.spyOn(session, 'useCurrentUser').mockReturnValue({ status: 'ready', user: null });
+  const count = vi.spyOn(notificationsApi, 'unreadCount');
+  render(<NotificationBell />);
+  expect(count).not.toHaveBeenCalled();
+  expect(screen.queryByRole('link')).toBeNull();
+});
+it('cuenta solo con la pestaña visible y actualiza la campana al leer', async () => {
+  vi.useFakeTimers();
+  vi.spyOn(session, 'useCurrentUser').mockReturnValue({
+    status: 'ready',
+    user: { id: 'u', name: 'Ana', hasWorkerProfile: true, hasPublisherProfile: false },
   });
-
-  it('muestra 9+ cuando hay más de nueve sin leer', async () => {
-    unreadCount.mockResolvedValue({ unread: 12 });
-    render(<NotificationBell />);
-    expect(await screen.findByText('9+')).toBeInTheDocument();
-    expect(screen.getByRole('link')).toHaveAccessibleName('Notificaciones: 12 sin leer');
+  const visible = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  const count = vi.spyOn(notificationsApi, 'unreadCount').mockResolvedValue({ unread: 12 });
+  render(<NotificationBell />);
+  await act(() => Promise.resolve());
+  expect(screen.getByRole('link', { name: 'Notificaciones, 12 sin leer' })).toHaveTextContent('9+');
+  await act(() => vi.advanceTimersByTimeAsync(30000));
+  expect(count).toHaveBeenCalledTimes(2);
+  visible.mockReturnValue('hidden');
+  document.dispatchEvent(new Event('visibilitychange'));
+  await act(() => vi.advanceTimersByTimeAsync(60000));
+  expect(count).toHaveBeenCalledTimes(2);
+  visible.mockReturnValue('visible');
+  await act(async () => {
+    document.dispatchEvent(new Event('visibilitychange'));
   });
-
-  it('se actualiza cuando la bandeja avisa de una lectura', async () => {
-    unreadCount.mockResolvedValueOnce({ unread: 2 }).mockResolvedValueOnce({ unread: 1 });
-    render(<NotificationBell />);
-    expect(await screen.findByText('2')).toBeInTheDocument();
-    await act(async () => {
-      window.dispatchEvent(new Event('red:notifications'));
-    });
-    expect(await screen.findByText('1')).toBeInTheDocument();
+  count.mockResolvedValue({ unread: 0 });
+  await act(async () => {
+    window.dispatchEvent(new Event(inboxChanged));
   });
-
-  it('con la pestaña oculta no consulta', async () => {
-    unreadCount.mockResolvedValue({ unread: 0 });
-    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
-    render(<NotificationBell />);
-    await act(async () => {});
-    expect(await screen.findByRole('link')).toHaveAccessibleName('Notificaciones');
-    expect(unreadCount).not.toHaveBeenCalled();
-    visibility.mockRestore();
-  });
+  expect(screen.getByRole('link', { name: 'Notificaciones' })).toHaveTextContent('');
 });

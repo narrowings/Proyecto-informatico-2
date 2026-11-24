@@ -1,59 +1,91 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { isPublicPath } from '@/components/auth/session-guard';
 import { notificationsApi } from '@/lib/api';
+import { ApiError } from '@/lib/api/http';
 import { ROUTES } from '@/lib/routes';
 import { useCurrentUser } from '@/lib/session/use-current-user';
 
+export const inboxChanged = 'red:notifications';
+
 export function NotificationBell() {
+  const path = usePathname();
+  return isPublicPath(path) ? null : <SessionBell />;
+}
+function SessionBell() {
   const session = useCurrentUser();
-  const [unread, setUnread] = useState(0);
-
+  return session.status === 'ready' && session.user ? <UnreadBell /> : null;
+}
+function UnreadBell() {
+  const [count, setCount] = useState(0);
   useEffect(() => {
-    if (session.status !== 'ready' || !session.user) return;
-    let active = true;
-    const refresh = () => {
-      if (document.visibilityState === 'visible')
-        void notificationsApi
-          .unreadCount()
-          .then(({ unread }) => active && setUnread(unread))
-          .catch(() => {});
-    };
+    let current = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    let nextAllowed = 0;
+    function refresh() {
+      clearTimeout(timer);
+      const version = ++current;
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() < nextAllowed) {
+        timer = setTimeout(refresh, nextAllowed - Date.now());
+        return;
+      }
+      notificationsApi
+        .unreadCount()
+        .then(
+          ({ unread }) => {
+            if (version === current) setCount(unread);
+          },
+          (error: unknown) => {
+            if (version === current && error instanceof ApiError && error.status === 429)
+              nextAllowed = Date.now() + error.retryAfter * 1000;
+          },
+        )
+        .finally(() => {
+          if (version === current)
+            timer = setTimeout(refresh, Math.max(30000, nextAllowed - Date.now()));
+        });
+    }
     refresh();
-    const timer = window.setInterval(refresh, 60_000);
     document.addEventListener('visibilitychange', refresh);
-    window.addEventListener('red:notifications', refresh);
+    window.addEventListener(inboxChanged, refresh);
     return () => {
-      active = false;
-      window.clearInterval(timer);
+      current++;
+      clearTimeout(timer);
       document.removeEventListener('visibilitychange', refresh);
-      window.removeEventListener('red:notifications', refresh);
+      window.removeEventListener(inboxChanged, refresh);
     };
-  }, [session.status, session.status === 'ready' ? session.user?.id : undefined]);
-
-  if (session.status !== 'ready' || !session.user) return null;
+  }, []);
   return (
     <Link
       href={ROUTES.notifications}
-      aria-label={`Notificaciones${unread ? `: ${unread} sin leer` : ''}`}
-      className="relative flex size-11 items-center justify-center rounded-full text-ink focus-visible:outline-3 focus-visible:outline-brand"
+      aria-label={count ? `Notificaciones, ${count} sin leer` : 'Notificaciones'}
+      className="relative flex size-11 shrink-0 items-center justify-center rounded-full border border-line bg-white text-brand-dark focus-visible:outline-3 focus-visible:outline-brand"
     >
       <svg
         aria-hidden="true"
+        width="22"
+        height="22"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        strokeWidth="2"
-        className="size-6"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       >
-        <path d="M18 8a6 6 0 00-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
+        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 10h18c0-2-3-3-3-10ZM10 21a2 2 0 0 0 4 0" />
       </svg>
-      {unread ? (
-        <span className="absolute top-0.5 right-0.5 min-w-5 rounded-full bg-danger px-1 text-center text-xs font-bold text-white">
-          {unread > 9 ? '9+' : unread}
+      {count > 0 && (
+        <span
+          aria-hidden="true"
+          className="absolute -right-1 -top-1 rounded-full bg-brand px-1.5 text-xs font-bold text-white"
+        >
+          {count > 9 ? '9+' : count}
         </span>
-      ) : null}
+      )}
     </Link>
   );
 }

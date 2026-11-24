@@ -2,8 +2,8 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { AppNav } from '@/components/app/app-nav';
 import { AppSessionGuard } from '@/components/auth/session-guard';
-import { NotificationBell } from '@/components/notifications/notification-bell';
 import { Logo } from '@/components/logo';
+import { NotificationBell } from '@/components/notifications/notification-bell';
 import { ROUTES } from '@/lib/routes';
 
 /** Marco de las pantallas con sesión: contenido arriba y menú principal abajo. */
@@ -11,7 +11,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col">
       <AppSessionGuard />
-      <header className="mx-auto flex w-full max-w-md items-center justify-between px-5 pt-6">
+      <header className="mx-auto flex w-full max-w-md items-center justify-between gap-3 px-5 pt-6">
         <Link
           href={ROUTES.home}
           aria-label="Ir al inicio"
