@@ -7,6 +7,7 @@ export const ROUTES = {
   publish: '/publicar',
   /** "Mi actividad" (HU-013). */
   activity: '/mi-actividad',
+  notifications: '/notificaciones',
   /** "Mi perfil": editar, disponibilidad y privacidad (HU-032, HU-030). */
   myProfile: '/perfil',
   /** Crear el perfil de trabajador (HU-002). */

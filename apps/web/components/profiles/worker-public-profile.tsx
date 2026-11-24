@@ -2,7 +2,9 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { Alert } from '@/components/ui/alert';
+import { ReportButton } from '@/components/reports/report-button';
 import { profilesApi, type PublicWorkerProfile } from '@/lib/api';
+import { useCurrentUser } from '@/lib/session/use-current-user';
 import { Avatar } from './avatar';
 import { ReputationSummary } from './reputation-summary';
 
@@ -59,6 +61,7 @@ function Card({ title, children }: { title: string; children: ReactNode }) {
  * exacta ni documentos, y respeta la foto y la experiencia ocultas.
  */
 export function WorkerPublicProfile({ id }: { id: string }) {
+  const session = useCurrentUser();
   const [state, setState] = useState<State>({ status: 'loading' });
 
   useEffect(() => {
@@ -129,6 +132,10 @@ export function WorkerPublicProfile({ id }: { id: string }) {
       ) : null}
 
       <ReputationSummary reputation={profile.reputation} />
+
+      {session.status === 'ready' && session.user && session.user.workerProfileId !== profile.id ? (
+        <ReportButton targetType="USER" targetId={profile.id} profileKind="WORKER" />
+      ) : null}
 
       <Alert tone="warning">
         El teléfono y los datos de contacto solo se comparten con quien lo selecciona, después de
