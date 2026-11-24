@@ -8,7 +8,7 @@ import { AcceptTermsForm } from './accept-terms-form';
 const documents = {
   terms: { version: '0.1', url: '/legal/terminos' },
   privacy: { version: '0.1', url: '/legal/privacidad' },
-  dataProcessing: { version: '0.1', url: '/legal/tratamiento-de-datos' },
+  dataProcessing: { version: '0.1', url: '/legal/autorizacion-datos' },
 };
 const replace = vi.fn();
 const acceptTerms = vi.fn();

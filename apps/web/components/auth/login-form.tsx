@@ -16,6 +16,8 @@ type Problem =
   | { kind: 'invalid' }
   | { kind: 'locked'; minutes: number }
   | { kind: 'unconfirmed' }
+  | { kind: 'suspended' }
+  | { kind: 'blocked' }
   | { kind: 'unexpected' };
 
 type Resend = 'idle' | 'sending' | 'sent' | 'failed';
@@ -60,6 +62,10 @@ export function LoginForm({
           return;
         case 'unconfirmed':
           setProblem({ kind: 'unconfirmed' });
+          return;
+        case 'suspended':
+        case 'blocked':
+          setProblem({ kind: result.status });
           return;
       }
     } catch {
@@ -144,6 +150,15 @@ export function LoginForm({
         <Alert tone="danger" role="alert">
           Superaste el número de intentos permitidos. Por seguridad, bloqueamos el ingreso durante{' '}
           {problem.minutes} minutos. Inténtalo de nuevo más tarde.
+        </Alert>
+      ) : null}
+
+      {problem?.kind === 'suspended' || problem?.kind === 'blocked' ? (
+        <Alert tone="danger" role="alert">
+          {problem.kind === 'blocked'
+            ? 'Tu cuenta fue bloqueada por incumplir las normas de la plataforma.'
+            : 'Tu cuenta está suspendida.'}{' '}
+          Te enviamos un correo con el motivo y cómo apelar.
         </Alert>
       ) : null}
 

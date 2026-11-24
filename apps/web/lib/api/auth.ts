@@ -35,7 +35,10 @@ export type LoginResult =
   /** Bloqueo temporal tras 5 intentos fallidos consecutivos (HU-021 CA3). */
   | { status: 'locked'; retryAfterMinutes: number }
   /** La cuenta existe pero el correo no está confirmado (HU-021 CA4). */
-  | { status: 'unconfirmed' };
+  | { status: 'unconfirmed' }
+  /** Cuenta suspendida o bloqueada por moderación (HU-012). */
+  | { status: 'suspended' }
+  | { status: 'blocked' };
 
 /** Versión de cada documento legal que el usuario acepta (HU-017). */
 export type LegalConsents = Omit<RegisterRequest['consents'], 'isAdult'>;

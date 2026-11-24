@@ -26,9 +26,10 @@ export const ROUTES = {
   resetPassword: '/restablecer-contrasena',
   /** Aceptación de nuevas versiones de términos y política al iniciar sesión (HU-017 CA4). */
   acceptTerms: '/aceptar-terminos',
-  terms: '/terminos',
-  privacy: '/privacidad',
-  dataProcessing: '/tratamiento-datos',
+  terms: '/legal/terminos',
+  privacy: '/legal/privacidad',
+  dataProcessing: '/legal/autorizacion-datos',
+  adultDeclaration: '/legal/mayoria-edad',
 } as const;
 
 /** Perfil público de un trabajador (HU-029). */

@@ -55,6 +55,8 @@ export const authApi: AuthApi = {
       if (error instanceof ApiError) {
         if (error.status === 401) return { status: 'invalid_credentials' };
         if (error.problem.code === 'EMAIL_NOT_CONFIRMED') return { status: 'unconfirmed' };
+        if (error.problem.code === 'ACCOUNT_SUSPENDED') return { status: 'suspended' };
+        if (error.problem.code === 'ACCOUNT_BLOCKED') return { status: 'blocked' };
         if (error.status === 429)
           return {
             status: 'locked',

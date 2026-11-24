@@ -20,7 +20,7 @@ const dto: RegisterDto = {
 const legalDocuments = [
   { id: 'doc-terms', type: 'TERMS', version: '0.1', url: '/legal/terminos' },
   { id: 'doc-privacy', type: 'PRIVACY_POLICY', version: '0.1', url: '/legal/privacidad' },
-  { id: 'doc-data', type: 'DATA_TREATMENT', version: '0.1', url: '/legal/tratamiento-de-datos' },
+  { id: 'doc-data', type: 'DATA_TREATMENT', version: '0.1', url: '/legal/autorizacion-datos' },
 ];
 
 const setup = () => {

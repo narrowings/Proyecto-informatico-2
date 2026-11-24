@@ -87,6 +87,18 @@ describe('LoginForm', () => {
     expect(resendConfirmationLink).toHaveBeenCalledWith('ana@example.com');
   });
 
+  it.each([
+    ['suspended', /tu cuenta está suspendida/i],
+    ['blocked', /tu cuenta fue bloqueada/i],
+  ])('HU-012: una cuenta %s ve el motivo y cómo apelar', async (status, text) => {
+    login.mockResolvedValue({ status });
+    const user = userEvent.setup();
+    render(<LoginForm />);
+    await fillAndSubmit(user);
+    expect(await screen.findByText(text)).toHaveTextContent(/motivo y cómo apelar/);
+    expect(replace).not.toHaveBeenCalled();
+  });
+
   it('muestra un error junto a cada campo vacío y no consulta la API', async () => {
     const user = userEvent.setup();
     render(<LoginForm />);
