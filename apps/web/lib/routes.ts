@@ -3,6 +3,7 @@ export const ROUTES = {
   home: '/',
   /** "Quiero trabajar": oportunidades (feed en el Sprint 2). */
   work: '/trabajar',
+  opportunity: (id: string) => `/oportunidades/${encodeURIComponent(id)}`,
   /** "Necesito ayuda": publicar una necesidad. */
   publish: '/publicar',
   /** "Mi actividad" (HU-013). */

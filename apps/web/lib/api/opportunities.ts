@@ -44,4 +44,93 @@ export type OpportunitiesApi = {
   previewLaborWarnings(input: NewTaskOpportunity): Promise<LaborWarning[]>;
   /** `acknowledgeLaborWarning` solo debe ser `true` después de mostrar la advertencia. */
   publish(input: NewTaskOpportunity, acknowledgeLaborWarning: boolean): Promise<PublishResult>;
+  list(query: OpportunityQuery): Promise<OpportunityPage | { status: 'error' }>;
+  get(id: string): Promise<OpportunityResult>;
+  apply(id: string, message?: string): Promise<ApplicationResult>;
+  publishFormal(input: NewFormalOpportunity): Promise<FormalPublishResult>;
+  applicationStatus(ids: string[]): Promise<Record<string, import('./activity').ApplicationStatus>>;
 };
+
+export type OpportunityQuery = {
+  mode: 'tasks' | 'formal';
+  q?: string;
+  type?: TaskType;
+  categoryId?: number;
+  zoneId?: number;
+  modality?: 'ONSITE' | 'REMOTE' | 'HYBRID';
+  salaryMin?: number;
+  paymentMin?: number;
+  page?: number;
+  pageSize?: number;
+};
+export type Opportunity = {
+  id: string;
+  type: OpportunityType;
+  status: string;
+  title: string;
+  description: string;
+  category: { id: number; name: string };
+  zone: { id: number; name: string };
+  paymentCop: number | null;
+  salaryMinCop: number | null;
+  salaryMaxCop: number | null;
+  modality: 'ONSITE' | 'REMOTE' | 'HYBRID' | null;
+  schedule: string | null;
+  scheduledAt: string | null;
+  closesAt: string | null;
+  publisher: { id: string; displayName: string; photoUrl: string | null } | null;
+  /** Solo tareas: cupos, duración y condiciones. */
+  peopleNeeded?: number | null;
+  durationMinutes?: number | null;
+  conditions?: string | null;
+  /** Solo vacantes formales. */
+  experienceRequired?: string | null;
+  requirements?: string | null;
+};
+
+export type WorkModality = 'ONSITE' | 'REMOTE' | 'HYBRID';
+export type WorkSchedule = 'FULL_TIME' | 'PART_TIME' | 'SHIFTS' | 'FLEXIBLE';
+
+/** Vacante de empleo formal (HU-024). No lleva advertencia laboral: ya es empleo. */
+export type NewFormalOpportunity = {
+  title: string;
+  description: string;
+  categoryId: number;
+  zoneId: number;
+  salaryMinCop: number;
+  salaryMaxCop?: number;
+  modality: WorkModality;
+  schedule: WorkSchedule;
+  experienceRequired: string;
+  requirements: string;
+  /** ISO 8601 en UTC, en el futuro. */
+  closesAt: string;
+};
+
+export type FormalPublishResult =
+  | { status: 'published'; id: string }
+  | { status: 'no_publisher_profile' }
+  | { status: 'email_not_confirmed' }
+  | { status: 'rate_limited'; seconds: number }
+  | { status: 'invalid'; errors: Record<string, string[]> };
+export type OpportunityPage = {
+  items: Opportunity[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+export type OpportunityResult =
+  { status: 'found'; opportunity: Opportunity } | { status: 'not_found' };
+export type ApplicationResult =
+  | { status: 'applied' }
+  | {
+      status:
+        | 'already_applied'
+        | 'closed'
+        | 'no_worker_profile'
+        | 'not_found'
+        | 'rate_limited'
+        | 'email_not_confirmed'
+        | 'own_opportunity';
+    }
+  | { status: 'invalid'; errors: Record<string, string[]> };

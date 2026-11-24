@@ -8,11 +8,13 @@ import { PublishFlow } from './publish-flow';
 const previewLaborWarnings = vi.fn();
 const publish = vi.fn();
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn() }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
+const publishFormal = vi.fn();
 vi.mock('@/lib/api', () => ({
   opportunitiesApi: {
     previewLaborWarnings: (...args: unknown[]) => previewLaborWarnings(...args),
     publish: (...args: unknown[]) => publish(...args),
+    publishFormal: (...args: unknown[]) => publishFormal(...args),
   },
   catalogsApi: {
     listZones: () => Promise.resolve([{ id: 2, name: 'Ciudad Jardín' }]),
@@ -102,16 +104,47 @@ describe('PublishFlow: selección del tipo de oportunidad (HU-025)', () => {
     expect(screen.getByRole('radio', { name: 'Tarea' })).toBeChecked();
   });
 
-  it('el empleo formal no abre este formulario: avisa que tiene el suyo', async () => {
+  it('HU-024: el empleo formal abre su propio formulario, sin advertencia laboral', async () => {
     const user = userEvent.setup();
+    publishFormal.mockResolvedValue({ status: 'published', id: 'v-1' });
     render(<PublishFlow />);
     await choose(user, 'Empleo formal');
-
-    expect(screen.getByRole('status')).toHaveTextContent(/propio formulario/i);
-    const next = screen.getByRole('button', { name: 'Continuar' });
-    expect(next).toHaveAttribute('aria-disabled', 'true');
-    await user.click(next);
+    await user.click(screen.getByRole('button', { name: 'Continuar' }));
+    expect(await screen.findByLabelText('Cargo')).toBeInTheDocument();
     expect(screen.queryByLabelText('Actividad')).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Cargo'), 'Auxiliar de bodega');
+    await user.type(
+      screen.getByLabelText('Descripción de la vacante'),
+      'Recepción y despacho de mercancía en bodega.',
+    );
+    await user.selectOptions(screen.getByLabelText('Categoría'), '1');
+    await user.selectOptions(screen.getByLabelText('Zona de Cali'), '2');
+    await user.type(screen.getByLabelText('Salario mínimo (pesos)'), '1.600.000');
+    await user.selectOptions(screen.getByLabelText('Modalidad'), 'ONSITE');
+    await user.selectOptions(screen.getByLabelText('Jornada'), 'FULL_TIME');
+    await user.type(screen.getByLabelText('Experiencia requerida'), 'Seis meses en bodega');
+    await user.type(screen.getByLabelText('Requisitos'), 'Bachiller');
+    await user.type(
+      screen.getByLabelText('Fecha de cierre (hora de Colombia)'),
+      '2099-12-31T18:00',
+    );
+    await user.click(screen.getByRole('button', { name: 'Publicar vacante' }));
+
+    expect(publishFormal).toHaveBeenCalledWith({
+      title: 'Auxiliar de bodega',
+      description: 'Recepción y despacho de mercancía en bodega.',
+      categoryId: 1,
+      zoneId: 2,
+      salaryMinCop: 1600000,
+      modality: 'ONSITE',
+      schedule: 'FULL_TIME',
+      experienceRequired: 'Seis meses en bodega',
+      requirements: 'Bachiller',
+      closesAt: '2099-12-31T23:00:00.000Z',
+    });
+    expect(previewLaborWarnings).not.toHaveBeenCalled();
+    expect(await screen.findByText('¡Tu oportunidad ya está publicada!')).toBeInTheDocument();
   });
 
   it('con "Servicio" y condiciones de relación laboral recomienda revisar el tipo (CA3)', async () => {
