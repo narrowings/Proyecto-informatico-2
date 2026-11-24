@@ -8,6 +8,7 @@ export const ROUTES = {
   /** "Mi actividad" (HU-013). */
   activity: '/mi-actividad',
   notifications: '/notificaciones',
+  admin: '/admin/reportes',
   /** "Mi perfil": editar, disponibilidad y privacidad (HU-032, HU-030). */
   myProfile: '/perfil',
   /** Crear el perfil de trabajador (HU-002). */
