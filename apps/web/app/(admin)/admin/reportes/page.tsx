@@ -1,13 +1,14 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { adminApi } from '@/lib/api/admin.http';
+import type { AdminPage, ReportGroup } from '@/lib/api/admin';
 import { Alert } from '@/components/ui/alert';
 export default function ReportsPage() {
-  const [data, setData] = useState<any>();
+  const [data, setData] = useState<AdminPage<ReportGroup>>();
   const [error, setError] = useState(false);
   useEffect(() => {
     void adminApi
-      .reports('status=PENDING&page=1&pageSize=20')
+      .reports(new URLSearchParams('status=PENDING&page=1&pageSize=20'))
       .then(setData)
       .catch(() => setError(true));
   }, []);
@@ -19,7 +20,7 @@ export default function ReportsPage() {
         <p>Cargando…</p>
       ) : data.items.length ? (
         <ul>
-          {data.items.map((item: any) => (
+          {data.items.map((item) => (
             <li
               key={`${item.targetType}-${item.targetId}`}
               className="mt-3 rounded-card border border-line p-4"
@@ -35,3 +36,6 @@ export default function ReportsPage() {
     </section>
   );
 }
+
+
+
