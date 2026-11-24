@@ -28,6 +28,39 @@ afterEach(() => vi.unstubAllGlobals());
 const bodyOf = (call: number) => JSON.parse(String(fetchApi.mock.calls[call][1]?.body));
 
 describe('opportunitiesApi', () => {
+  it('lista, consulta detalle y estado de postulación', async () => {
+    const { opportunitiesApi } = await import('./opportunities.http');
+    fetchApi
+      .mockResolvedValueOnce(json({ accessToken: 'jwt' }))
+      .mockResolvedValueOnce(json({ items: [], total: 0, page: 1, pageSize: 20 }))
+      .mockResolvedValueOnce(json({ id: 'o1' }))
+      .mockResolvedValueOnce(json({ o1: true }));
+    await opportunitiesApi.list({ mode: 'tasks', page: 1, pageSize: 20 });
+    await expect(opportunitiesApi.get('o1')).resolves.toMatchObject({ status: 'found' });
+    await expect(opportunitiesApi.applicationStatus(['o1'])).resolves.toEqual({ o1: true });
+    expect(String(fetchApi.mock.calls[1][0])).toMatch(/mode=tasks/);
+  });
+
+  it('traduce errores esperados al postularse', async () => {
+    const { opportunitiesApi } = await import('./opportunities.http');
+    fetchApi
+      .mockResolvedValueOnce(json({ accessToken: 'jwt' }))
+      .mockResolvedValueOnce(json({ code: 'ALREADY_APPLIED' }, 409))
+      .mockResolvedValueOnce(json({ code: 'OPPORTUNITY_NOT_OPEN' }, 409))
+      .mockResolvedValueOnce(json({}, 403))
+      .mockResolvedValueOnce(json({}, 404))
+      .mockResolvedValueOnce(json({}, 429))
+      .mockResolvedValueOnce(json({ errors: { message: ['Muy largo'] } }, 400));
+    await expect(opportunitiesApi.apply('o')).resolves.toEqual({ status: 'already_applied' });
+    await expect(opportunitiesApi.apply('o')).resolves.toEqual({ status: 'closed' });
+    await expect(opportunitiesApi.apply('o')).resolves.toEqual({ status: 'no_worker_profile' });
+    await expect(opportunitiesApi.apply('o')).resolves.toEqual({ status: 'not_found' });
+    await expect(opportunitiesApi.apply('o')).resolves.toEqual({ status: 'rate_limited' });
+    await expect(opportunitiesApi.apply('o')).resolves.toEqual({
+      status: 'invalid',
+      errors: { message: ['Muy largo'] },
+    });
+  });
   it('consulta las advertencias con sesión y el mismo cuerpo de la publicación', async () => {
     const { opportunitiesApi } = await import('./opportunities.http');
     fetchApi

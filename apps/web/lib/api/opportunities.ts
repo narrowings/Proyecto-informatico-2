@@ -44,4 +44,50 @@ export type OpportunitiesApi = {
   previewLaborWarnings(input: NewTaskOpportunity): Promise<LaborWarning[]>;
   /** `acknowledgeLaborWarning` solo debe ser `true` después de mostrar la advertencia. */
   publish(input: NewTaskOpportunity, acknowledgeLaborWarning: boolean): Promise<PublishResult>;
+  list(query: OpportunityQuery): Promise<OpportunityPage>;
+  get(id: string): Promise<OpportunityResult>;
+  apply(id: string, message?: string): Promise<ApplicationResult>;
+  applicationStatus(ids: string[]): Promise<Record<string, boolean>>;
 };
+
+export type OpportunityQuery = {
+  mode: 'tasks' | 'formal';
+  q?: string;
+  type?: TaskType;
+  categoryId?: number;
+  zoneId?: number;
+  modality?: 'ONSITE' | 'REMOTE' | 'HYBRID';
+  salaryMin?: number;
+  paymentMin?: number;
+  page?: number;
+  pageSize?: number;
+};
+export type Opportunity = {
+  id: string;
+  type: OpportunityType;
+  status: string;
+  title: string;
+  description: string;
+  category: { id: number; name: string };
+  zone: { id: number; name: string };
+  paymentCop: number | null;
+  salaryMinCop: number | null;
+  salaryMaxCop: number | null;
+  modality: 'ONSITE' | 'REMOTE' | 'HYBRID' | null;
+  schedule: string | null;
+  scheduledAt: string | null;
+  closesAt: string | null;
+  publisher: { id: string; displayName: string; photoUrl: string | null } | null;
+};
+export type OpportunityPage = {
+  items: Opportunity[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+export type OpportunityResult =
+  { status: 'found'; opportunity: Opportunity } | { status: 'not_found' };
+export type ApplicationResult =
+  | { status: 'applied' }
+  | { status: 'already_applied' | 'closed' | 'no_worker_profile' | 'not_found' | 'rate_limited' }
+  | { status: 'invalid'; errors: Record<string, string[]> };
