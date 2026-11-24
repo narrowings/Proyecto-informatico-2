@@ -305,6 +305,15 @@ export class IdentityService {
     return count === 1;
   }
 
+  // HU-012 CA1: resumen de las cuentas reportadas para la cola de moderación (detrás de AdminGuard).
+  async getUsersForModeration(ids: string[]) {
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: [...new Set(ids)] } },
+      select: { id: true, name: true, email: true, status: true, role: true, createdAt: true },
+    });
+    return new Map(users.map((user) => [user.id, user]));
+  }
+
   // RF-01-05: otros módulos consultan el estado de la cuenta por aquí, nunca leen la tabla users.
   async isAccountActive(userId: string) {
     const user = await this.prisma.user.findUnique({

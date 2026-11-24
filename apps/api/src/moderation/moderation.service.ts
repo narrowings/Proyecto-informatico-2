@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   AccountStatus,
   AuditAction,
+  type Prisma,
   ReportStatus,
   ReportTargetType,
   UserRole,
@@ -42,62 +43,54 @@ export class ModerationService {
     @Inject(ConfigService) private readonly config: ConfigService,
   ) {}
 
+  // HU-012 CA1: cola agrupada por elemento, la base agrupa y pagina. Más reportes primero y, a
+  // igualdad, el más antiguo. No expone quién reportó.
   async listReports({
     status = ReportStatus.PENDING,
     targetType,
     page,
     pageSize,
   }: ListReportsQuery) {
-    const reports = await this.prisma.report.findMany({
-      where: { status, ...(targetType && { targetType }) },
-      select: { targetType: true, targetId: true, reason: true, createdAt: true },
-      orderBy: { createdAt: 'asc' },
-    });
-    const groups = new Map<
-      string,
-      {
-        targetType: ReportTargetType;
-        targetId: string;
-        reportCount: number;
-        reasons: Record<string, number>;
-        firstReportedAt: Date;
-        lastReportedAt: Date;
-      }
-    >();
-    for (const report of reports) {
-      const key = `${report.targetType}:${report.targetId}`;
-      const group = groups.get(key);
-      if (group) {
-        group.reportCount++;
-        group.reasons[report.reason] = (group.reasons[report.reason] ?? 0) + 1;
-        group.lastReportedAt = report.createdAt;
-      } else {
-        groups.set(key, {
-          targetType: report.targetType,
-          targetId: report.targetId,
-          reportCount: 1,
-          reasons: { [report.reason]: 1 },
-          firstReportedAt: report.createdAt,
-          lastReportedAt: report.createdAt,
-        });
-      }
-    }
-    const ordered = [...groups.values()].sort(
-      (left, right) =>
-        right.reportCount - left.reportCount ||
-        left.firstReportedAt.getTime() - right.firstReportedAt.getTime(),
+    const where: Prisma.ReportWhereInput = { status, ...(targetType && { targetType }) };
+    const [all, groups] = await Promise.all([
+      this.prisma.report.groupBy({ by: ['targetType', 'targetId'], where }),
+      this.prisma.report.groupBy({
+        by: ['targetType', 'targetId'],
+        where,
+        _count: { _all: true },
+        _min: { createdAt: true },
+        _max: { createdAt: true },
+        orderBy: [{ _count: { targetId: 'desc' } }, { _min: { createdAt: 'asc' } }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+    const reasons = groups.length
+      ? await this.prisma.report.groupBy({
+          by: ['targetType', 'targetId', 'reason'],
+          where: { ...where, targetId: { in: groups.map((group) => group.targetId) } },
+          _count: { _all: true },
+        })
+      : [];
+    const users = await this.identity.getUsersForModeration(
+      groups.filter((group) => group.targetType === ReportTargetType.USER).map((g) => g.targetId),
     );
-    const current = ordered.slice((page - 1) * pageSize, page * pageSize);
     const items = await Promise.all(
-      current.map(async (group) => ({
-        ...group,
-        target:
-          group.targetType === ReportTargetType.OPPORTUNITY
-            ? await this.opportunities.getForModeration(group.targetId)
-            : await this.userForModeration(group.targetId),
+      groups.map(async (group) => ({
+        targetType: group.targetType,
+        targetId: group.targetId,
+        reportCount: group._count._all,
+        reasons: Object.fromEntries(
+          reasons
+            .filter((r) => r.targetType === group.targetType && r.targetId === group.targetId)
+            .map((r) => [r.reason, r._count._all]),
+        ),
+        firstReportedAt: group._min.createdAt,
+        lastReportedAt: group._max.createdAt,
+        target: await this.targetSummary(group.targetType, group.targetId, users),
       })),
     );
-    return { items, total: ordered.length, page, pageSize };
+    return { items, total: all.length, page, pageSize };
   }
 
   async reportDetail(targetType: ReportTargetType, targetId: string) {
@@ -107,7 +100,12 @@ export class ModerationService {
       orderBy: { createdAt: 'asc' },
     });
     if (!reports.length) throw new NotFoundException('No encontramos reportes para este elemento');
-    return { targetType, targetId, reportCount: reports.length, reports };
+    const users =
+      targetType === ReportTargetType.USER
+        ? await this.identity.getUsersForModeration([targetId])
+        : new Map();
+    const target = await this.targetSummary(targetType, targetId, users);
+    return { targetType, targetId, target, reportCount: reports.length, reports };
   }
 
   async hideOpportunity(actorUserId: string, id: string, reason: string, ip?: string) {
@@ -159,7 +157,12 @@ export class ModerationService {
         throw new NotFoundException('Publicación no encontrada');
       throw conflict('NOT_HIDDEN', 'La publicación no está oculta');
     }
-    await this.notify(result.publisherUserId, 'Tu publicación volvió a estar visible', reason);
+    await this.notify(
+      result.publisherUserId,
+      'Tu publicación volvió a estar visible',
+      reason,
+      false,
+    );
     return { id: result.id, hidden: false };
   }
 
@@ -225,7 +228,7 @@ export class ModerationService {
         {
           actorUserId,
           action: AuditAction.REPORT_DISMISSED,
-          targetType: 'report',
+          targetType: targetType.toLowerCase(),
           targetId,
           reason,
           ip,
@@ -274,7 +277,7 @@ export class ModerationService {
         : to === AccountStatus.BLOCKED
           ? 'Tu cuenta fue bloqueada'
           : 'Tu cuenta fue suspendida';
-    await this.notify(id, title, reason);
+    await this.notify(id, title, reason, to !== AccountStatus.ACTIVE);
     return { id, status: to };
   }
 
@@ -283,9 +286,9 @@ export class ModerationService {
     targetId: string,
     actorUserId: string,
     reason: string,
-    tx: Parameters<typeof this.audit.record>[1],
+    tx: Prisma.TransactionClient,
   ) {
-    await tx!.report.updateMany({
+    await tx.report.updateMany({
       where: { targetType, targetId, status: ReportStatus.PENDING },
       data: {
         status: ReportStatus.ACTIONED,
@@ -296,25 +299,43 @@ export class ModerationService {
     });
   }
 
-  private async notify(userId: string | null, title: string, reason: string) {
+  // HU-012 CA1: avisa al afectado con el motivo y cómo apelar (HU-036 aún no existe: por correo).
+  // Va también por correo porque una cuenta suspendida o bloqueada no puede abrir su bandeja.
+  private async notify(userId: string | null, title: string, reason: string, canAppeal = true) {
     if (!userId) return;
-    const support =
-      this.config.get<string>('SUPPORT_EMAIL') ||
-      this.config.get<string>('MAIL_FROM') ||
-      DEFAULT_MAIL_FROM;
+    const appeal = !canAppeal
+      ? ''
+      : ` Si crees que es un error, escríbenos a ${this.supportEmail()} indicando tu correo de registro.`;
+    const motive = `Motivo: ${reason.replace(/[.\s]+$/, '')}.`;
+    // body admite 500 caracteres: se recorta el motivo, nunca la forma de apelar.
+    const room = 500 - appeal.length;
     await this.notifications.notify({
       userId,
       type: 'MODERATION_NOTICE',
       title,
-      body: `${reason}. Si crees que es un error, escríbenos a ${support} indicando tu correo de registro.`,
+      body:
+        (motive.length > room ? `${[...motive].slice(0, room - 1).join('')}…` : motive) + appeal,
       link: '/mi-actividad',
     });
   }
 
-  private async userForModeration(userId: string) {
-    // Identity no expone un método de lectura por id con nombre y correo. Conservamos acceso seguro
-    // para que la cola sea utilizable sin leer la tabla de identity desde este módulo.
-    const access = await this.identity.getAccess(userId);
-    return access ? { id: userId, ...access } : null;
+  // Solo la dirección: MAIL_FROM suele venir como "Nombre <correo>".
+  private supportEmail() {
+    const configured =
+      this.config.get<string>('SUPPORT_EMAIL')?.trim() ||
+      this.config.get<string>('MAIL_FROM')?.trim() ||
+      DEFAULT_MAIL_FROM;
+    return configured.match(/<([^>]+)>/)?.[1] ?? configured;
+  }
+
+  private async targetSummary(
+    targetType: ReportTargetType,
+    targetId: string,
+    users: Map<string, unknown>,
+  ) {
+    if (targetType === ReportTargetType.OPPORTUNITY) {
+      return this.opportunities.getForModeration(targetId);
+    }
+    return users.get(targetId) ?? null;
   }
 }
