@@ -63,7 +63,9 @@ export function PublisherPublicProfile({ id }: { id: string }) {
           ? `Calificación: ${profile.reputation.average} de 5 (${profile.reputation.ratingsCount})`
           : 'Nuevo en la plataforma'}
       </p>
-      {session.status === 'ready' && session.user?.publisherProfileId !== profile.id ? (
+      {session.status === 'ready' &&
+      session.user &&
+      session.user.publisherProfileId !== profile.id ? (
         <ReportButton targetType="USER" targetId={profile.id} profileKind="PUBLISHER" />
       ) : null}
     </article>

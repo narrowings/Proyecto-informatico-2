@@ -133,7 +133,7 @@ export function WorkerPublicProfile({ id }: { id: string }) {
 
       <ReputationSummary reputation={profile.reputation} />
 
-      {session.status === 'ready' && session.user?.id !== profile.id ? (
+      {session.status === 'ready' && session.user && session.user.workerProfileId !== profile.id ? (
         <ReportButton targetType="USER" targetId={profile.id} profileKind="WORKER" />
       ) : null}
 

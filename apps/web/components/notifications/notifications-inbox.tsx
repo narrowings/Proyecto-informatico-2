@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { notificationsApi, type NotificationItem, type NotificationsPage } from '@/lib/api';
+import { isInternalPath } from '@/lib/internal-path';
 
 const relativeDate = (value: string) => {
   const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60_000));
@@ -20,6 +21,7 @@ export function NotificationsInbox() {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [loadingMore, setLoadingMore] = useState(false);
+  const [notice, setNotice] = useState<string>();
   const load = (number = 1) =>
     notificationsApi.list(number).then((data) => {
       setPage(data);
@@ -39,9 +41,9 @@ export function NotificationsInbox() {
         );
         refreshBell();
       }
-      if (result.link?.startsWith('/')) router.push(result.link);
+      if (isInternalPath(result.link)) router.push(result.link);
     } catch {
-      setStatus('error');
+      setNotice('No pudimos abrir la notificación. Inténtalo de nuevo.');
     }
   }
   if (status === 'loading')
@@ -72,15 +74,24 @@ export function NotificationsInbox() {
         <Button
           variant="secondary"
           onClick={() =>
-            void notificationsApi.markAllAsRead().then(() => {
-              setItems((all) => all.map((item) => ({ ...item, read: true })));
-              refreshBell();
-            })
+            void notificationsApi
+              .markAllAsRead()
+              .then(() => {
+                setNotice(undefined);
+                setItems((all) => all.map((item) => ({ ...item, read: true })));
+                refreshBell();
+              })
+              .catch(() => setNotice('No pudimos marcar las notificaciones. Inténtalo de nuevo.'))
           }
         >
           Marcar todas
         </Button>
       </div>
+      {notice ? (
+        <Alert tone="danger" role="alert">
+          {notice}
+        </Alert>
+      ) : null}
       {items.length === 0 ? (
         <p className="text-muted">No tienes notificaciones todavía.</p>
       ) : (
@@ -108,9 +119,10 @@ export function NotificationsInbox() {
           variant="secondary"
           aria-disabled={loadingMore}
           onClick={() => {
+            if (loadingMore) return;
             setLoadingMore(true);
             void load(page.page + 1)
-              .catch(() => setStatus('error'))
+              .catch(() => setNotice('No pudimos cargar más notificaciones.'))
               .finally(() => setLoadingMore(false));
           }}
         >

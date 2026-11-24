@@ -8,4 +8,14 @@ export type CreateReport = {
   reason: ReportReason;
   description?: string;
 };
-export type ReportsApi = { create(input: CreateReport): Promise<{ id: string; message: string }> };
+
+/** Resultado de reportar (HU-019). Los errores esperados llegan como estado, no como excepción. */
+export type CreateReportResult =
+  | { status: 'reported'; message: string }
+  | { status: 'already_reported' }
+  | { status: 'cannot_report_self' }
+  | { status: 'not_found' }
+  | { status: 'rate_limited' }
+  | { status: 'invalid'; errors: Record<string, string[]> };
+
+export type ReportsApi = { create(input: CreateReport): Promise<CreateReportResult> };
