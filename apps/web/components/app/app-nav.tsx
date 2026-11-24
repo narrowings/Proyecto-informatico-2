@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useCurrentUser } from '@/lib/session/use-current-user';
 import type { ReactNode } from 'react';
 import { ROUTES } from '@/lib/routes';
 
@@ -65,11 +66,23 @@ const ITEMS = [
  */
 export function AppNav() {
   const pathname = usePathname();
+  const session = useCurrentUser();
+  const items =
+    session.status === 'ready' && session.user?.isAdmin
+      ? [
+          ...ITEMS,
+          {
+            href: ROUTES.admin,
+            label: 'Admin',
+            icon: icon(<path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4z" />),
+          },
+        ]
+      : ITEMS;
 
   return (
     <nav aria-label="Menú principal" className="sticky bottom-0 border-t border-line bg-white">
       <ul className="mx-auto flex h-17 max-w-md">
-        {ITEMS.map((item) => {
+        {items.map((item) => {
           const current = pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
             <li key={item.href} className="flex flex-1">
