@@ -11,3 +11,7 @@ export type * from './profiles';
 export type * from './ratings';
 export type * from './reputation';
 export type * from './session';
+export { activityApi } from './activity.http';
+export type * from './activity';
+export { notificationsApi } from './notifications.http';
+export type * from './notifications';

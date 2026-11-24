@@ -1,7 +1,12 @@
 export const API_ORIGIN = new URL(process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001')
   .origin;
 
-type ApiProblem = { code?: string; message?: string; errors?: Record<string, string[]> };
+type ApiProblem = {
+  code?: string;
+  message?: string;
+  errors?: Record<string, string[]>;
+  warnings?: { code: string; message: string }[];
+};
 
 export class ApiError extends Error {
   constructor(
