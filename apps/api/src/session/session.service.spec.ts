@@ -321,9 +321,16 @@ describe('SessionService.me', () => {
       id: 'u1',
       name: 'Ana Gómez',
       email: 'ana@correo.com',
+      isAdmin: false,
       hasWorkerProfile: false,
       hasPublisherProfile: false,
     });
+  });
+
+  it('HU-012: indica si la cuenta es administradora', async () => {
+    const { prisma, service } = setup();
+    prisma.user.findUnique.mockResolvedValue({ ...userWith('ACTIVE'), role: 'ADMIN' });
+    await expect(service.me('u1')).resolves.toMatchObject({ isAdmin: true });
   });
 
   it('rechaza si la cuenta ya no existe o no está activa', async () => {

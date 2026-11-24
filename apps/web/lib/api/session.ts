@@ -10,6 +10,8 @@ export type CurrentUser = {
   hasWorkerProfile: boolean;
   hasPublisherProfile: boolean;
   publisherProfileId?: string;
+  /** HU-012: muestra el acceso al panel de administración. La API lo verifica en cada ruta /admin. */
+  isAdmin?: boolean;
 };
 
 export type SessionApi = {
