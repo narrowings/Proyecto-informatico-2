@@ -21,6 +21,13 @@ export const ACCOUNT_SUSPENDED = {
   message: 'Tu cuenta ha sido suspendida. Por favor, contacta al soporte para más información.',
 };
 
+// HU-012: bloqueo por moderación. El motivo y cómo apelar llegan por correo.
+export const ACCOUNT_BLOCKED = {
+  code: 'ACCOUNT_BLOCKED',
+  message:
+    'Tu cuenta fue bloqueada por incumplir las normas de la plataforma. Revisa tu correo para conocer el motivo y cómo apelar.',
+};
+
 // HU-021 CA5: sesion vencida o cerrada, el frontend pide iniciar sesion otra vez
 
 export const SESSION_EXPIRED = {

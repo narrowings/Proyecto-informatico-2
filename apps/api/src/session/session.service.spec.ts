@@ -176,6 +176,13 @@ describe('SessionService.login', () => {
       code: 'ACCOUNT_SUSPENDED',
     });
   });
+
+  it('HU-012: una cuenta bloqueada no entra y recibe su propio mensaje', async () => {
+    const { prisma, service } = setup();
+    prisma.user.findUnique.mockResolvedValue(userWith('BLOCKED'));
+    const error = await rejection(service.login(dto, meta));
+    expect((error as ForbiddenException).getResponse()).toMatchObject({ code: 'ACCOUNT_BLOCKED' });
+  });
 });
 
 describe('SessionService.refresh', () => {

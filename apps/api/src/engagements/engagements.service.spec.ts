@@ -408,4 +408,11 @@ describe('Notificaciones de trabajos', () => {
     expect(JSON.stringify(event)).not.toContain(opportunity.exactAddress);
     expect(identity.getContact).not.toHaveBeenCalled();
   });
+
+  it('RF-07-07: el aviso de trabajo terminado lleva al detalle del trabajo, donde se confirma', async () => {
+    const { service, selection, notifications } = setup();
+    selection.status = 'ACCEPTED';
+    await service.markFinished('t', 'trabajador');
+    expect(notifications.notifyMany.mock.calls[0][0][0].link).toBe('/mi-actividad/trabajos/t');
+  });
 });

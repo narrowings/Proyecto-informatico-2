@@ -17,6 +17,7 @@ import { serializableTransaction } from '../prisma/serializable-transaction';
 import { AccessTokenService } from './access-token.service';
 import type { LoginDto } from './dto/login.dto';
 import {
+  ACCOUNT_BLOCKED,
   ACCOUNT_SUSPENDED,
   EMAIL_NOT_CONFIRMED,
   INVALID_CREDENTIALS,
@@ -58,6 +59,7 @@ export class SessionService {
     if (user.status === AccountStatus.PENDING_CONFIRMATION) {
       throw new ForbiddenException(EMAIL_NOT_CONFIRMED);
     }
+    if (user.status === AccountStatus.BLOCKED) throw new ForbiddenException(ACCOUNT_BLOCKED);
     if (user.status !== AccountStatus.ACTIVE) throw new ForbiddenException(ACCOUNT_SUSPENDED);
 
     const requiresTermsAcceptance = await this.identity.requiresTermsAcceptance(user.id);

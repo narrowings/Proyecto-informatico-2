@@ -4,12 +4,13 @@ import prismaClient from '@prisma/client';
 const { PrismaClient } = prismaClient;
 const prisma = new PrismaClient();
 
-// Versiones provisionales de los textos legales (riesgo del plan del Sprint 1): se reemplazan por una
-// versión nueva cuando llegue el texto aprobado por jurídica (Emmanuel Solarte), nunca se editan.
+// Versión 0.1 de los textos legales (asesoría jurídica, Emmanuel Solarte): el texto está en
+// apps/web/content/legal y la URL de cada uno debe coincidir con su página. Un texto nuevo se publica
+// como una versión nueva, nunca se edita una ya aceptada.
 const legalDocuments = [
   { type: 'TERMS', version: '0.1', url: '/legal/terminos' },
   { type: 'PRIVACY_POLICY', version: '0.1', url: '/legal/privacidad' },
-  { type: 'DATA_TREATMENT', version: '0.1', url: '/legal/tratamiento-de-datos' },
+  { type: 'DATA_TREATMENT', version: '0.1', url: '/legal/autorizacion-datos' },
 ] as const;
 
 // T-03: catálogo PROVISIONAL, igual al que ya usa el frontend. La lista oficial de la Fase 0 la

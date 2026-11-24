@@ -45,6 +45,16 @@ const messages = {
   RATING_AVAILABLE: 'Ya puedes calificar el trabajo',
 } satisfies Partial<Record<NotifyInput['type'], string>>;
 
+// RF-07-07: cada aviso lleva a la pantalla donde se actúa (aceptar, confirmar, calificar).
+const JOB_EVENTS = new Set(['JOB_FINISH_MARKED', 'JOB_COMPLETED', 'JOB_CANCELLED']);
+function linkFor(type: keyof typeof messages, resourceId: string) {
+  const id = encodeURIComponent(resourceId);
+  if (type === 'SELECTION_RECEIVED') return `/mi-actividad/selecciones/${id}`;
+  if (type === 'RATING_AVAILABLE') return `/mi-actividad/trabajos/${id}/calificar`;
+  if (JOB_EVENTS.has(type)) return `/mi-actividad/trabajos/${id}`;
+  return '/mi-actividad';
+}
+
 function event(
   userId: string,
   type: keyof typeof messages,
@@ -58,8 +68,7 @@ function event(
     type,
     title,
     body: `"${opportunityTitle}": ${description}`.slice(0, 500),
-    link:
-      type === 'SELECTION_RECEIVED' ? `/mi-actividad/selecciones/${resourceId}` : '/mi-actividad',
+    link: linkFor(type, resourceId),
     data: { recursoId: resourceId },
   };
 }

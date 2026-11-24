@@ -219,7 +219,12 @@ export function RegisterForm() {
           {...register('dataAuthorization')}
         />
         <Checkbox
-          label="Confirmo que soy mayor de 18 años"
+          label={
+            <>
+              Confirmo que soy{' '}
+              <LegalLink href={ROUTES.adultDeclaration}>mayor de 18 años</LegalLink>
+            </>
+          }
           error={errors.isAdult?.message}
           {...register('isAdult')}
         />
