@@ -47,7 +47,7 @@ export type OpportunitiesApi = {
   list(query: OpportunityQuery): Promise<OpportunityPage>;
   get(id: string): Promise<OpportunityResult>;
   apply(id: string, message?: string): Promise<ApplicationResult>;
-  applicationStatus(ids: string[]): Promise<Record<string, boolean>>;
+  applicationStatus(ids: string[]): Promise<Record<string, import('./activity').ApplicationStatus>>;
 };
 
 export type OpportunityQuery = {

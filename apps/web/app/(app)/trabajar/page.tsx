@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
-import { ComingSoon } from '@/components/app/coming-soon';
+import { Suspense } from 'react';
+import { OpportunityFeed } from '@/components/opportunities/opportunity-feed';
 import { RequireProfile } from '@/components/app/require-profile';
 
 export const metadata: Metadata = {
@@ -10,9 +11,9 @@ export const metadata: Metadata = {
 export default function TrabajarPage() {
   return (
     <RequireProfile profile="worker">
-      <ComingSoon title="Oportunidades para ti">
-        Aquí verás el feed de trabajos rápidos y el de empleo formal (HU-004 y HU-009, Sprint 2).
-      </ComingSoon>
+      <Suspense fallback={<p>Cargando…</p>}>
+        <OpportunityFeed />
+      </Suspense>
     </RequireProfile>
   );
 }
