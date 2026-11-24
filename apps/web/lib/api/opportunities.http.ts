@@ -13,12 +13,19 @@ function warningsOf(error: ApiError): LaborWarning[] {
 }
 
 export const opportunitiesApi: OpportunitiesApi = {
-  list(query) {
+  async list(query) {
     const params = new URLSearchParams();
     Object.entries(query).forEach(
       ([key, value]) => value !== undefined && params.set(key, String(value)),
     );
-    return authenticated(`/opportunities?${params}`);
+    try {
+      return await authenticated<import('./opportunities').OpportunityPage>(
+        `/opportunities?${params}`,
+      );
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) throw error;
+      return { status: 'error' };
+    }
   },
   async get(id) {
     try {

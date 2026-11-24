@@ -34,6 +34,36 @@ it('muestra vacío y filtra por zona, texto y modo', async () => {
   fireEvent.click(screen.getByText('Empleo formal'));
   expect(mocks.replace).toHaveBeenCalledWith('/trabajar?modo=formal');
 });
+it('permite reintentar después de un error resuelto por el cliente', async () => {
+  mocks.list.mockResolvedValueOnce({ status: 'error' });
+  render(<OpportunityFeed />);
+  await screen.findByRole('alert');
+  fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+  await screen.findByText('No hay oportunidades con estos filtros');
+  expect(mocks.list).toHaveBeenCalledTimes(2);
+});
+
+it('envía pago y tipo, y elimina los filtros al limpiar', async () => {
+  render(<OpportunityFeed />);
+  await screen.findByText('No hay oportunidades con estos filtros');
+  fireEvent.change(screen.getByLabelText('Pago mínimo'), { target: { value: '50000' } });
+  fireEvent.change(screen.getByLabelText('Tipo'), { target: { value: 'TASK' } });
+  await waitFor(() =>
+    expect(mocks.list).toHaveBeenLastCalledWith(
+      expect.objectContaining({ paymentMin: 50000, type: 'TASK' }),
+    ),
+  );
+  fireEvent.click(screen.getByText('Limpiar filtros'));
+  await waitFor(() =>
+    expect(mocks.list).toHaveBeenLastCalledWith({
+      mode: 'tasks',
+      q: undefined,
+      page: 1,
+      pageSize: 20,
+    }),
+  );
+});
+
 it('muestra tarjetas, marca postulaciones y carga otra página', async () => {
   const item = {
     id: 'uno',

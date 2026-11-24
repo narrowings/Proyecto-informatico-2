@@ -44,7 +44,7 @@ export type OpportunitiesApi = {
   previewLaborWarnings(input: NewTaskOpportunity): Promise<LaborWarning[]>;
   /** `acknowledgeLaborWarning` solo debe ser `true` después de mostrar la advertencia. */
   publish(input: NewTaskOpportunity, acknowledgeLaborWarning: boolean): Promise<PublishResult>;
-  list(query: OpportunityQuery): Promise<OpportunityPage>;
+  list(query: OpportunityQuery): Promise<OpportunityPage | { status: 'error' }>;
   get(id: string): Promise<OpportunityResult>;
   apply(id: string, message?: string): Promise<ApplicationResult>;
   applicationStatus(ids: string[]): Promise<Record<string, import('./activity').ApplicationStatus>>;

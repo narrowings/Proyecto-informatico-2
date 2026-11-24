@@ -28,6 +28,13 @@ afterEach(() => vi.unstubAllGlobals());
 const bodyOf = (call: number) => JSON.parse(String(fetchApi.mock.calls[call][1]?.body));
 
 describe('opportunitiesApi', () => {
+  it('devuelve un estado de error recuperable cuando falla el feed', async () => {
+    const { opportunitiesApi } = await import('./opportunities.http');
+    fetchApi
+      .mockResolvedValueOnce(json({ accessToken: 'jwt' }))
+      .mockResolvedValueOnce(json({}, 503));
+    await expect(opportunitiesApi.list({ mode: 'tasks' })).resolves.toEqual({ status: 'error' });
+  });
   it.each([
     ['EMAIL_NOT_CONFIRMED', 'email_not_confirmed', 403],
     ['WORKER_PROFILE_REQUIRED', 'no_worker_profile', 403],

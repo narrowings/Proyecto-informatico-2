@@ -49,6 +49,10 @@ export function OpportunityFeed() {
           page,
           pageSize: 20,
         });
+        if ('status' in result) {
+          if (active) setFailed(true);
+          return;
+        }
         const statuses = result.items.length
           ? await opportunitiesApi.applicationStatus(result.items.map((item) => item.id))
           : {};
