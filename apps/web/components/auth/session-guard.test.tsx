@@ -2,7 +2,7 @@ import { act, fireEvent, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SESSION_EXPIRED_REASON } from '@/lib/auth/session';
 import { ROUTES } from '@/lib/routes';
-import { SessionGuard } from './session-guard';
+import { isPublicPath, SessionGuard } from './session-guard';
 
 const replace = vi.fn();
 const logout = vi.fn();
@@ -55,5 +55,14 @@ describe('SessionGuard', () => {
     await act(() => vi.advanceTimersByTimeAsync(5000));
 
     expect(logout).not.toHaveBeenCalled();
+  });
+});
+
+describe('isPublicPath', () => {
+  it('los perfiles públicos se ven sin sesión (HU-029)', () => {
+    expect(isPublicPath('/trabajadores/8fcbfa5e')).toBe(true);
+    expect(isPublicPath('/publicadores/8fcbfa5e')).toBe(true);
+    expect(isPublicPath('/perfil/trabajador')).toBe(false);
+    expect(isPublicPath('/trabajar')).toBe(false);
   });
 });

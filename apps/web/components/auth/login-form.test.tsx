@@ -114,4 +114,17 @@ describe('LoginForm', () => {
       ROUTES.register,
     );
   });
+
+  it('enlaza a "Olvidé mi contraseña" (HU-018)', () => {
+    render(<LoginForm />);
+    expect(screen.getByRole('link', { name: /olvidaste tu contraseña/i })).toHaveAttribute(
+      'href',
+      ROUTES.forgotPassword,
+    );
+  });
+
+  it('confirma el cambio de contraseña al volver de restablecerla (HU-018 CA2)', () => {
+    render(<LoginForm passwordReset />);
+    expect(screen.getByRole('status')).toHaveTextContent(/cambiamos tu contraseña/i);
+  });
 });

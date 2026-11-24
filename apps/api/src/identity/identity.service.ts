@@ -6,10 +6,12 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AccountStatus, LegalDocumentType, Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
+import { AUDIT, type AuditContract } from '../audit/audit.contract';
 import { mailErrorCode } from '../common/mail/pending-mail';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfirmationMailer } from './confirmation-mailer';
@@ -35,6 +37,8 @@ export class IdentityService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(ConfirmationMailer) private readonly mailer: ConfirmationMailer,
     @Inject(ConfigService) private readonly config: ConfigService,
+    // HU-038 CA1: la aceptación de términos queda en la auditoría. Opcional solo para pruebas aisladas.
+    @Optional() @Inject(AUDIT) private readonly audit?: AuditContract,
   ) {}
 
   // HU-001 CA1 y HU-017 CA2: crea la cuenta pendiente, sus consentimientos y el enlace en una sola escritura.
@@ -53,21 +57,29 @@ export class IdentityService {
 
     let user;
     try {
-      user = await this.prisma.user.create({
-        data: {
-          name: dto.name,
-          email: dto.email,
-          phone: dto.phone.replace(/^\+57/, ''),
-          passwordHash,
-          ageConfirmedAt: now,
-          consents: {
-            create: legalDocuments.map((doc) => ({ legalDocumentId: doc.id, acceptedAt: now, ip })),
+      user = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({
+          data: {
+            name: dto.name,
+            email: dto.email,
+            phone: dto.phone.replace(/^\+57/, ''),
+            passwordHash,
+            ageConfirmedAt: now,
+            consents: {
+              create: legalDocuments.map((doc) => ({
+                legalDocumentId: doc.id,
+                acceptedAt: now,
+                ip,
+              })),
+            },
+            confirmationTokens: {
+              create: { tokenHash: hash, expiresAt: new Date(now.getTime() + CONFIRMATION_TTL_MS) },
+            },
           },
-          confirmationTokens: {
-            create: { tokenHash: hash, expiresAt: new Date(now.getTime() + CONFIRMATION_TTL_MS) },
-          },
-        },
-        select: { id: true, name: true, email: true, status: true },
+          select: { id: true, name: true, email: true, status: true },
+        });
+        await this.recordTermsAccepted(created.id, legalDocuments, ip, tx);
+        return created;
       });
     } catch (error) {
       // Dos registros simultáneos con el mismo correo: gana el primero.
@@ -106,10 +118,33 @@ export class IdentityService {
 
   async acceptTerms(userId: string, versions: LegalVersionsDto, ip: string) {
     const current = await this.acceptedVersions(versions);
-    await this.prisma.consent.createMany({
-      data: current.map((doc) => ({ userId, legalDocumentId: doc.id, ip })),
-      skipDuplicates: true,
+    await this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.consent.createMany({
+        data: current.map((doc) => ({ userId, legalDocumentId: doc.id, ip })),
+        skipDuplicates: true,
+      });
+      // Repetir la aceptación de versiones ya aceptadas no es un evento nuevo.
+      if (count > 0) await this.recordTermsAccepted(userId, current, ip, tx);
     });
+  }
+
+  private recordTermsAccepted(
+    userId: string,
+    documents: { type: LegalDocumentType; version: string }[],
+    ip: string,
+    tx: Prisma.TransactionClient,
+  ) {
+    return this.audit?.record(
+      {
+        actorUserId: userId,
+        action: 'TERMS_ACCEPTED',
+        targetType: 'user',
+        targetId: userId,
+        ip,
+        data: Object.fromEntries(documents.map((doc) => [doc.type, doc.version])),
+      },
+      tx,
+    );
   }
 
   // HU-001 CA2. Repetir el enlace después de confirmar no es un error.
@@ -208,6 +243,75 @@ export class IdentityService {
       where: { id: userId },
       select: { name: true, phone: true },
     });
+  }
+
+  // AdminGuard (HU-012 CA2): rol y estado leídos de la base en cada petición.
+  getAccess(userId: string) {
+    return this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, status: true },
+    });
+  }
+
+  // HU-012 CA3: búsqueda de usuarios para el panel de administración (por nombre o correo).
+  // Solo la usa el módulo de moderación detrás de AdminGuard: por eso incluye el correo.
+  async searchUsers({
+    q,
+    status,
+    page,
+    pageSize,
+  }: {
+    q?: string;
+    status?: AccountStatus;
+    page: number;
+    pageSize: number;
+  }) {
+    const text = q?.trim();
+    const where: Prisma.UserWhereInput = {
+      ...(status && { status }),
+      ...(text && {
+        OR: [
+          { name: { contains: text, mode: 'insensitive' } },
+          { email: { contains: text.toLowerCase() } },
+        ],
+      }),
+    };
+    const [total, items] = await this.prisma.$transaction([
+      this.prisma.user.count({ where }),
+      this.prisma.user.findMany({
+        where,
+        select: { id: true, name: true, email: true, status: true, role: true, createdAt: true },
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+    return { items, total, page, pageSize };
+  }
+
+  // HU-012 CA1/CA3: suspender, bloquear o reactivar. Condicional al estado anterior para que dos
+  // administradores a la vez no se pisen; devuelve false si el estado ya no era `from`.
+  // No toca sesiones ni auditoría: lo hace el módulo de moderación (revoca sesiones y registra).
+  async setAccountStatus(
+    userId: string,
+    from: AccountStatus[],
+    to: AccountStatus,
+    tx: Prisma.TransactionClient = this.prisma,
+  ) {
+    const { count } = await tx.user.updateMany({
+      where: { id: userId, status: { in: from } },
+      data: { status: to },
+    });
+    return count === 1;
+  }
+
+  // HU-012 CA1: resumen de las cuentas reportadas para la cola de moderación (detrás de AdminGuard).
+  async getUsersForModeration(ids: string[]) {
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: [...new Set(ids)] } },
+      select: { id: true, name: true, email: true, status: true, role: true, createdAt: true },
+    });
+    return new Map(users.map((user) => [user.id, user]));
   }
 
   // RF-01-05: otros módulos consultan el estado de la cuenta por aquí, nunca leen la tabla users.

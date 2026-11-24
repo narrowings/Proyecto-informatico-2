@@ -3,13 +3,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PublisherPublicProfile } from './publisher-public-profile';
 
 const getPublicPublisherProfile = vi.fn();
+const getCurrentUser = vi.fn();
 vi.mock('@/lib/api', () => ({
   profilesApi: {
     getPublicPublisherProfile: (...args: unknown[]) => getPublicPublisherProfile(...args),
   },
+  sessionApi: { getCurrentUser: () => getCurrentUser() },
 }));
 
 beforeEach(() => {
+  getCurrentUser.mockReset().mockResolvedValue(null);
   getPublicPublisherProfile.mockReset().mockResolvedValue({
     id: 'p1',
     kind: 'COMPANY',

@@ -26,7 +26,7 @@ const legalDocuments = [
 const setup = () => {
   const prisma = {
     user: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
-    consent: { count: vi.fn(), createMany: vi.fn() },
+    consent: { count: vi.fn(), createMany: vi.fn().mockResolvedValue({ count: 3 }) },
     legalDocument: { findMany: vi.fn().mockResolvedValue(legalDocuments) },
     emailConfirmationToken: {
       findUnique: vi.fn(),
@@ -34,16 +34,22 @@ const setup = () => {
       updateMany: vi.fn(),
       create: vi.fn(),
     },
-    $transaction: vi.fn((operations: unknown[]) => Promise.all(operations)),
+    $transaction: vi.fn(),
   };
+  // Como Prisma: una lista de operaciones o una función que recibe el cliente de la transacción.
+  prisma.$transaction.mockImplementation((arg: unknown) =>
+    typeof arg === 'function' ? arg(prisma) : Promise.all(arg as unknown[]),
+  );
   const mailer = { send: vi.fn().mockResolvedValue(undefined) };
   const config = { get: vi.fn((_key: string, fallback: string) => fallback) };
+  const audit = { record: vi.fn().mockResolvedValue(undefined) };
   const service = new IdentityService(
     prisma as unknown as PrismaService,
     mailer as unknown as ConfirmationMailer,
     config as unknown as ConfigService,
+    audit,
   );
-  return { prisma, mailer, service };
+  return { prisma, mailer, audit, service };
 };
 
 it('solicita las versiones pendientes al ingresar y conserva el primer consentimiento en los reintentos', async () => {
@@ -60,6 +66,37 @@ it('solicita las versiones pendientes al ingresar y conserva el primer consentim
     skipDuplicates: true,
   });
   expect(await service.requiresTermsAcceptance('u1')).toBe(false);
+});
+
+describe('HU-038 CA1: aceptación de términos en la auditoría', () => {
+  it('al aceptar versiones nuevas registra el evento con las versiones y la IP', async () => {
+    const { audit, prisma, service } = setup();
+    await service.acceptTerms('u1', dto.consents, '10.0.0.1');
+    expect(audit.record).toHaveBeenCalledWith(
+      {
+        actorUserId: 'u1',
+        action: 'TERMS_ACCEPTED',
+        targetType: 'user',
+        targetId: 'u1',
+        ip: '10.0.0.1',
+        data: { TERMS: '0.1', PRIVACY_POLICY: '0.1', DATA_TREATMENT: '0.1' },
+      },
+      prisma,
+    );
+  });
+
+  it('repetir la aceptación de lo ya aceptado no crea otro evento', async () => {
+    const { audit, prisma, service } = setup();
+    prisma.consent.createMany.mockResolvedValue({ count: 0 });
+    await service.acceptTerms('u1', dto.consents, '10.0.0.1');
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it('si la auditoría falla, la aceptación no se confirma', async () => {
+    const { audit, service } = setup();
+    audit.record.mockRejectedValue(new Error('db'));
+    await expect(service.acceptTerms('u1', dto.consents, '10.0.0.1')).rejects.toThrow('db');
+  });
 });
 
 describe('IdentityService.register', () => {
@@ -107,6 +144,11 @@ describe('IdentityService.register', () => {
       })),
     );
     expect(data.ageConfirmedAt).toBeInstanceOf(Date);
+    // HU-038 CA1: en la misma transacción que crea la cuenta.
+    expect(ctx.audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'TERMS_ACCEPTED', ip: '10.0.0.1', targetType: 'user' }),
+      ctx.prisma,
+    );
   });
 
   it('HU-017 CA2: responde 409 si el usuario aceptó una versión que ya no está vigente', async () => {
@@ -282,5 +324,64 @@ describe('HU-014 Destinatarios de las notificaciones', () => {
     prisma.user.findUnique.mockResolvedValue(null);
 
     await expect(service.getNotificationRecipient('u1')).resolves.toBeNull();
+  });
+});
+
+describe('Acceso y estado de cuenta para administración (HU-012)', () => {
+  const adminSetup = () => {
+    const ctx = setup();
+    const user = ctx.prisma.user as Record<string, ReturnType<typeof vi.fn>>;
+    user.count = vi.fn().mockResolvedValue(1);
+    user.findMany = vi.fn().mockResolvedValue([{ id: 'u1' }]);
+    user.updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    return { ...ctx, user };
+  };
+
+  it('getAccess lee solo rol y estado', async () => {
+    const { user, service } = adminSetup();
+    user.findUnique.mockResolvedValue({ role: 'ADMIN', status: 'ACTIVE' });
+    await expect(service.getAccess('u1')).resolves.toEqual({ role: 'ADMIN', status: 'ACTIVE' });
+    expect(user.findUnique).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      select: { role: true, status: true },
+    });
+  });
+
+  it('CA3: busca por nombre sin distinguir mayúsculas o por correo, filtra por estado y pagina', async () => {
+    const { user, service } = adminSetup();
+    const result = await service.searchUsers({
+      q: '  ANA@ ',
+      status: 'ACTIVE',
+      page: 2,
+      pageSize: 5,
+    });
+    const where = {
+      status: 'ACTIVE',
+      OR: [{ name: { contains: 'ANA@', mode: 'insensitive' } }, { email: { contains: 'ana@' } }],
+    };
+    expect(user.count).toHaveBeenCalledWith({ where });
+    expect(user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where, skip: 5, take: 5 }),
+    );
+    const { select } = user.findMany.mock.calls[0][0];
+    expect(select).not.toHaveProperty('passwordHash');
+    expect(result).toMatchObject({ total: 1, page: 2, pageSize: 5 });
+  });
+
+  it('una búsqueda vacía no filtra por texto', async () => {
+    const { user, service } = adminSetup();
+    await service.searchUsers({ q: '   ', page: 1, pageSize: 20 });
+    expect(user.count).toHaveBeenCalledWith({ where: {} });
+  });
+
+  it('cambia el estado solo desde los estados permitidos', async () => {
+    const { user, service } = adminSetup();
+    await expect(service.setAccountStatus('u1', ['ACTIVE'], 'BLOCKED')).resolves.toBe(true);
+    expect(user.updateMany).toHaveBeenCalledWith({
+      where: { id: 'u1', status: { in: ['ACTIVE'] } },
+      data: { status: 'BLOCKED' },
+    });
+    user.updateMany.mockResolvedValue({ count: 0 });
+    await expect(service.setAccountStatus('u1', ['ACTIVE'], 'BLOCKED')).resolves.toBe(false);
   });
 });

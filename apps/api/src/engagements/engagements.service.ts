@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   forwardRef,
 } from '@nestjs/common';
 import { Prisma, type Job, type Selection } from '@prisma/client';
@@ -13,6 +14,7 @@ import {
   type ApplicationsContract,
   type ApplicationWithParties,
 } from '../applications/applications.contract';
+import { AUDIT, type AuditContract } from '../audit/audit.contract';
 import { IdentityService } from '../identity/identity.service';
 import {
   NOTIFICATIONS,
@@ -73,6 +75,8 @@ export class EngagementsService {
     @Inject(NOTIFICATIONS) private readonly notifications: NotificationsContract,
     @Inject(IdentityService) private readonly identity: IdentityService,
     @Inject(forwardRef(() => RatingsService)) private readonly ratings: RatingsService,
+    // HU-038 CA1: aceptar un trabajo genera el acuerdo y queda en la auditoría.
+    @Optional() @Inject(AUDIT) private readonly audit?: AuditContract,
   ) {}
 
   private async notify(events: NotifyInput[]) {
@@ -283,6 +287,16 @@ export class EngagementsService {
           scheduledAt,
         },
       });
+      await this.audit?.record(
+        {
+          actorUserId: userId,
+          action: 'AGREEMENT_ACCEPTED',
+          targetType: 'job',
+          targetId: job.id,
+          data: { selectionId: id, opportunityId: opportunity.id },
+        },
+        tx,
+      );
       const accepted = await tx.job.count({
         where: { opportunityId: opportunity.id, status: { not: 'CANCELLED' } },
       });

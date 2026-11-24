@@ -7,6 +7,10 @@ export const ROUTES = {
   publish: '/publicar',
   /** "Mi actividad" (HU-013). */
   activity: '/mi-actividad',
+  notifications: '/notificaciones',
+  admin: '/admin/reportes',
+  /** "Mi perfil": editar, disponibilidad y privacidad (HU-032, HU-030). */
+  myProfile: '/perfil',
   /** Crear el perfil de trabajador (HU-002). */
   workerProfile: '/perfil/trabajador',
   /** Crear el perfil de publicador o empresa (HU-008, pantalla de Diego Quintero). */
@@ -15,9 +19,23 @@ export const ROUTES = {
   registerPending: '/registro/pendiente',
   confirmEmail: '/confirmar-correo',
   login: '/iniciar-sesion',
+  /** "Olvidé mi contraseña" (HU-018). */
+  forgotPassword: '/olvide-contrasena',
+  /** Enlace del correo de recuperación: la ruta es obligatoria tal cual (HU-018). */
+  resetPassword: '/restablecer-contrasena',
   /** Aceptación de nuevas versiones de términos y política al iniciar sesión (HU-017 CA4). */
   acceptTerms: '/aceptar-terminos',
   terms: '/terminos',
   privacy: '/privacidad',
   dataProcessing: '/tratamiento-datos',
 } as const;
+
+/** Perfil público de un trabajador (HU-029). */
+export const workerPublicPath = (id: string) => `/trabajadores/${encodeURIComponent(id)}`;
+
+/** Calificar a la contraparte de un trabajo completado (HU-007). */
+export const rateJobPath = (jobId: string) =>
+  `/mi-actividad/trabajos/${encodeURIComponent(jobId)}/calificar`;
+
+/** Mi reputación (HU-046, HU-013 CA3). */
+export const MY_REPUTATION_PATH = '/mi-actividad/reputacion';

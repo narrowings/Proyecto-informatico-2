@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatCop, waitMessage } from './format';
+import { formatCop, formatDate, formatRating, waitMessage } from './format';
 
 describe('formatCop', () => {
   it.each([
@@ -26,5 +26,20 @@ describe('waitMessage', () => {
   it('sin dato de espera (cabecera ausente) no inventa un tiempo', () => {
     expect(waitMessage(Number.NaN)).toBe('Inténtalo de nuevo más tarde.');
     expect(waitMessage(0)).toBe('Inténtalo de nuevo más tarde.');
+  });
+});
+
+describe('formatRating', () => {
+  it('usa coma decimal y siempre un decimal', () => {
+    expect(formatRating(4.8)).toBe('4,8');
+    expect(formatRating(5)).toBe('5,0');
+    expect(formatRating(4.25)).toMatch(/^4,[23]$/);
+  });
+});
+
+describe('formatDate', () => {
+  it('muestra la fecha en hora de Bogotá (UTC-5)', () => {
+    // 03:00 UTC del 1 de diciembre son las 22:00 del 30 de noviembre en Bogotá.
+    expect(formatDate('2026-12-01T03:00:00.000Z')).toMatch(/^30 de nov/);
   });
 });

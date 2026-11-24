@@ -82,6 +82,7 @@ function setup() {
   const notifications = { notifyMany: vi.fn().mockResolvedValue(undefined), notify: vi.fn() };
   const identity = { getContact: vi.fn().mockResolvedValue({ name: 'Ana', phone: '3001234567' }) };
   const ratings = { hasRated: vi.fn().mockResolvedValue(false), recordCompletedJob: vi.fn() };
+  const audit = { record: vi.fn().mockResolvedValue(undefined) };
   const service = new EngagementsService(
     prisma as unknown as PrismaService,
     opportunities as unknown as OpportunitiesContract,
@@ -89,8 +90,10 @@ function setup() {
     notifications,
     identity as unknown as IdentityService,
     ratings as unknown as RatingsService,
+    audit,
   );
   return {
+    audit,
     service,
     tx,
     opportunity,
@@ -174,6 +177,28 @@ describe('HU-006 Selección', () => {
       }),
     );
     expect(tx.job.create).not.toHaveBeenCalled();
+  });
+
+  it('HU-038 CA1: aceptar genera el acuerdo y lo audita dentro de la transacción', async () => {
+    const { audit, service, tx, job } = setup();
+    await service.accept('s', 'trabajador', true);
+    expect(audit.record).toHaveBeenCalledWith(
+      {
+        actorUserId: 'trabajador',
+        action: 'AGREEMENT_ACCEPTED',
+        targetType: 'job',
+        targetId: job.id,
+        data: { selectionId: 's', opportunityId: 'o' },
+      },
+      tx,
+    );
+  });
+
+  it('si la auditoría falla, el trabajo no se acepta ni se avisa', async () => {
+    const { audit, service, notifications } = setup();
+    audit.record.mockRejectedValue(new Error('db'));
+    await expect(service.accept('s', 'trabajador', true)).rejects.toThrow('db');
+    expect(notifications.notifyMany).not.toHaveBeenCalled();
   });
 
   it('al llenar N cierra la oportunidad y rechaza a los demás postulantes', async () => {

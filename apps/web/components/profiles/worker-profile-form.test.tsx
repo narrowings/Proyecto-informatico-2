@@ -46,7 +46,8 @@ beforeEach(() => {
 describe('WorkerProfileForm', () => {
   it('trae el nombre de la cuenta', async () => {
     await renderForm();
-    expect(screen.getByLabelText(/^nombre/i)).toHaveValue('Ana Pérez');
+    // El nombre se precarga en un efecto después de cargar la sesión.
+    await waitFor(() => expect(screen.getByLabelText(/^nombre/i)).toHaveValue('Ana Pérez'));
   });
 
   it('sin habilidad, categoría ni zona no guarda y señala los campos (HU-002 CA2)', async () => {

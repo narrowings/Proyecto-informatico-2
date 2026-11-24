@@ -16,6 +16,7 @@ export const EMAIL_NOTIFICATION_TYPES: ReadonlySet<NotificationType> = new Set([
   'OPPORTUNITY_CANCELLED',
   'JOB_COMPLETED',
   'JOB_CANCELLED',
+  'MODERATION_NOTICE',
 ]);
 
 const inboxFields = {

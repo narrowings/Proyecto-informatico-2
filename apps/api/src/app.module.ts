@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { rateLimitOptions } from './common/http/rate-limit';
 import { ApplicationsModule } from './applications/applications.module';
+import { AuditModule } from './audit/audit.module';
 import { CatalogsModule } from './catalogs/catalogs.module';
 import { EngagementsModule } from './engagements/engagements.module';
 import { HealthModule } from './health/health.module';
@@ -14,11 +15,14 @@ import { PrismaModule } from './prisma/prisma.module';
 import { RatingsModule } from './ratings/ratings.module';
 import { ProfilesModule } from './profiles/profiles.module';
 import { SessionModule } from './session/session.module';
+import { ReportsModule } from './reports/reports.module';
+import { ModerationModule } from './moderation/moderation.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ThrottlerModule.forRoot(rateLimitOptions),
     PrismaModule,
+    AuditModule,
     HealthModule,
     CatalogsModule,
     SessionModule,
@@ -30,6 +34,8 @@ import { SessionModule } from './session/session.module';
     RatingsModule,
     NotificationsModule,
     PasswordResetModule,
+    ReportsModule,
+    ModerationModule,
   ],
 })
 export class AppModule {}

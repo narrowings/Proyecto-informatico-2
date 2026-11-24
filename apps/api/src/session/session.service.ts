@@ -1,5 +1,12 @@
-import { ForbiddenException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
-import { AccountStatus, type Prisma } from '@prisma/client';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  Optional,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { AccountStatus, type Prisma, UserRole } from '@prisma/client';
+import { AUDIT, type AuditContract } from '../audit/audit.contract';
 import * as argon2 from 'argon2';
 import { randomUUID } from 'node:crypto';
 import { ProfilesService } from '../profiles/profiles.service';
@@ -31,13 +38,15 @@ export class SessionService {
     @Inject(AccessTokenService) private readonly accessTokens: AccessTokenService,
     @Inject(IdentityService) private readonly identity: IdentityService,
     @Inject(ProfilesService) private readonly profiles: ProfilesService,
+    // HU-038 CA1: el inicio de sesión de un administrador queda en la auditoría.
+    @Optional() @Inject(AUDIT) private readonly audit?: AuditContract,
   ) {}
 
   // HU-021 CA1, CA2 y CA4.
   async login(dto: LoginDto, meta: SessionMeta) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
-      select: { id: true, name: true, email: true, passwordHash: true, status: true },
+      select: { id: true, name: true, email: true, passwordHash: true, status: true, role: true },
     });
 
     // Con correo inexistente también se verifica un hash, para que la respuesta tarde lo mismo.
@@ -67,6 +76,9 @@ export class SessionService {
           userAgent: meta.userAgent?.slice(0, 255),
         },
       });
+      if (user.role === UserRole.ADMIN) {
+        await this.audit?.record({ actorUserId: user.id, action: 'ADMIN_LOGIN', ip: meta.ip }, tx);
+      }
     });
     const { token: accessToken, expiresIn } = await this.accessTokens.sign(user.id);
     return {
@@ -141,7 +153,7 @@ export class SessionService {
   async me(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, email: true, status: true },
+      select: { id: true, name: true, email: true, status: true, role: true },
     });
     if (!user || user.status !== AccountStatus.ACTIVE) {
       throw new UnauthorizedException(SESSION_EXPIRED);
@@ -150,6 +162,9 @@ export class SessionService {
       id: user.id,
       name: user.name,
       email: user.email,
+      // HU-012: el frontend muestra el panel de administración solo si es true. La API lo vuelve
+      // a verificar en cada ruta /admin (AdminGuard): esto solo decide qué se muestra.
+      isAdmin: user.role === UserRole.ADMIN,
       ...(await this.profiles.getProfileSummary(user.id)),
     };
   }

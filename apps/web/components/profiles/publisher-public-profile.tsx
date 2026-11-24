@@ -2,9 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { Alert } from '@red/ui';
+import { ReportButton } from '@/components/reports/report-button';
 import { profilesApi, type PublicPublisherProfile } from '@/lib/api';
+import { useCurrentUser } from '@/lib/session/use-current-user';
 
 export function PublisherPublicProfile({ id }: { id: string }) {
+  const session = useCurrentUser();
   const [profile, setProfile] = useState<PublicPublisherProfile | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
@@ -60,6 +63,11 @@ export function PublisherPublicProfile({ id }: { id: string }) {
           ? `Calificación: ${profile.reputation.average} de 5 (${profile.reputation.ratingsCount})`
           : 'Nuevo en la plataforma'}
       </p>
+      {session.status === 'ready' &&
+      session.user &&
+      session.user.publisherProfileId !== profile.id ? (
+        <ReportButton targetType="USER" targetId={profile.id} profileKind="PUBLISHER" />
+      ) : null}
     </article>
   );
 }

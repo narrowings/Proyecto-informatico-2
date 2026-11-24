@@ -1,6 +1,9 @@
 /** Parámetro de la URL de inicio de sesión cuando la sesión se cerró por inactividad. */
 export const SESSION_EXPIRED_REASON = 'sesion-expirada';
 
+/** Parámetro de la URL de inicio de sesión tras restablecer la contraseña (HU-018 CA2). */
+export const PASSWORD_RESET_REASON = 'contrasena-actualizada';
+
 /**
  * El SRS (RNF-SEG-05) fija 7 días de inactividad para usuarios; las HU no lo
  * definen. Es configurable con NEXT_PUBLIC_SESSION_INACTIVITY_MINUTES.

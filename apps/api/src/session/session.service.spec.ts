@@ -41,6 +41,7 @@ const setup = () => {
     requiresTermsAcceptance: vi.fn().mockResolvedValue(false),
     hasCurrentCredential: vi.fn().mockResolvedValue(true),
   };
+  const audit = { record: vi.fn().mockResolvedValue(undefined) };
   const service = new SessionService(
     {
       ...prisma,
@@ -53,8 +54,9 @@ const setup = () => {
         .fn()
         .mockResolvedValue({ hasWorkerProfile: false, hasPublisherProfile: false }),
     } as unknown as ProfilesService,
+    audit,
   );
-  return { prisma, accessTokens, service, identity };
+  return { prisma, accessTokens, service, identity, audit };
 };
 
 const rejection = (promise: Promise<unknown>) =>
@@ -66,6 +68,23 @@ const rejection = (promise: Promise<unknown>) =>
   );
 
 describe('SessionService.login', () => {
+  it('HU-038 CA1: el inicio de sesión de un administrador queda auditado con la IP', async () => {
+    const { audit, prisma, service } = setup();
+    prisma.user.findUnique.mockResolvedValue({ ...userWith('ACTIVE'), role: 'ADMIN' });
+    await service.login(dto, meta);
+    expect(audit.record).toHaveBeenCalledWith(
+      { actorUserId: 'u1', action: 'ADMIN_LOGIN', ip: meta.ip },
+      prisma,
+    );
+  });
+
+  it('el inicio de sesión de un usuario común no se audita', async () => {
+    const { audit, prisma, service } = setup();
+    prisma.user.findUnique.mockResolvedValue({ ...userWith('ACTIVE'), role: 'USER' });
+    await service.login(dto, meta);
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
   it('HU-021 CA1: con credenciales correctas abre la sesión y guarda solo el hash del token', async () => {
     const { prisma, service } = setup();
     prisma.user.findUnique.mockResolvedValue(userWith('ACTIVE'));
@@ -302,9 +321,16 @@ describe('SessionService.me', () => {
       id: 'u1',
       name: 'Ana Gómez',
       email: 'ana@correo.com',
+      isAdmin: false,
       hasWorkerProfile: false,
       hasPublisherProfile: false,
     });
+  });
+
+  it('HU-012: indica si la cuenta es administradora', async () => {
+    const { prisma, service } = setup();
+    prisma.user.findUnique.mockResolvedValue({ ...userWith('ACTIVE'), role: 'ADMIN' });
+    await expect(service.me('u1')).resolves.toMatchObject({ isAdmin: true });
   });
 
   it('rechaza si la cuenta ya no existe o no está activa', async () => {

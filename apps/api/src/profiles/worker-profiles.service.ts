@@ -180,6 +180,15 @@ export class WorkerProfilesService {
     return profile?.id ?? null;
   }
 
+  // HU-019: resuelve al dueño de un perfil de trabajador sin exponer sus datos personales.
+  async getWorkerUserId(profileId: string) {
+    const profile = await this.prisma.workerProfile.findUnique({
+      where: { id: profileId },
+      select: { userId: true },
+    });
+    return profile?.userId ?? null;
+  }
+
   // RF-05-06: lo que ve el publicador de cada interesado. Respeta la preferencia de foto.
   async getCards(ids: string[]) {
     const profiles = await this.prisma.workerProfile.findMany({
