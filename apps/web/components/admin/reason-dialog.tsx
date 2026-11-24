@@ -55,8 +55,12 @@ export function ReasonDialog({
   if (!open) return null;
   async function confirm() {
     const trimmed = reason.trim();
-    if (trimmed.length < 10) {
-      setMessage('El motivo debe tener al menos 10 caracteres.');
+    if (trimmed.length < 10 || trimmed.length > 500) {
+      setMessage(
+        trimmed.length < 10
+          ? 'El motivo debe tener al menos 10 caracteres.'
+          : 'El motivo admite máximo 500 caracteres.',
+      );
       return;
     }
     if (sending) return;
