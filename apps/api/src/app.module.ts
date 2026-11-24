@@ -15,6 +15,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { RatingsModule } from './ratings/ratings.module';
 import { ProfilesModule } from './profiles/profiles.module';
 import { SessionModule } from './session/session.module';
+import { ReportsModule } from './reports/reports.module';
+import { ModerationModule } from './moderation/moderation.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -32,6 +34,8 @@ import { SessionModule } from './session/session.module';
     RatingsModule,
     NotificationsModule,
     PasswordResetModule,
+    ReportsModule,
+    ModerationModule,
   ],
 })
 export class AppModule {}

@@ -200,7 +200,7 @@ describe('RF-07-07 Guardado seguro', () => {
 });
 
 describe('HU-014 CA1–CA4 y RF-07-06 Avisos por correo', () => {
-  it('envía correo solo para los ocho tipos indicados y guarda un registro para todos', async () => {
+  it('envía correo solo para los tipos configurados y guarda un registro para todos', async () => {
     const { service, notification, identity, mailer } = setup();
     const emailTypes: NotificationType[] = [
       'NEW_APPLICANT',
@@ -211,6 +211,7 @@ describe('HU-014 CA1–CA4 y RF-07-06 Avisos por correo', () => {
       'OPPORTUNITY_CANCELLED',
       'JOB_COMPLETED',
       'JOB_CANCELLED',
+      'MODERATION_NOTICE',
     ];
     const inputs = Object.values(NotificationType).map((type) => ({ ...event, type, title: type }));
     await service.notifyMany(inputs);
