@@ -1,10 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { Alert, Button, ButtonLink } from '@red/ui';
+import { Button, ButtonLink } from '@red/ui';
 import type { OpportunityType, TaskType } from '@/lib/api';
 import { OPPORTUNITY_TYPES } from '@/lib/opportunities/types';
 import { ROUTES } from '@/lib/routes';
+import { FormalForm } from './formal-form';
 import { TaskForm } from './task-form';
 import { TypeSelector } from './type-selector';
 
@@ -12,7 +13,7 @@ type Step = 'type' | 'form' | 'done';
 
 /**
  * "Necesito ayuda": elegir el tipo de oportunidad (HU-025) y publicar la necesidad (HU-003).
- * El formulario de vacante de empleo formal es de HU-024 y se conecta en `FORMAL_JOB`.
+ * Con `FORMAL_JOB` se muestra el formulario de vacante formal (HU-024).
  */
 export function PublishFlow() {
   const [step, setStep] = useState<Step>('type');
@@ -39,6 +40,29 @@ export function PublishFlow() {
         >
           Publicar otra
         </Button>
+      </div>
+    );
+  }
+
+  if (step === 'form' && formal) {
+    return (
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-2">
+          <h1 className="font-display text-3xl leading-tight font-bold">Publica tu vacante</h1>
+          <p className="flex flex-wrap items-center gap-x-3 text-[15px] text-muted">
+            <span>
+              Tipo: <strong className="text-ink">{label}</strong>
+            </span>
+            <button
+              type="button"
+              onClick={() => setStep('type')}
+              className="min-h-11 font-bold text-brand underline underline-offset-2 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            >
+              Cambiar tipo
+            </button>
+          </p>
+        </div>
+        <FormalForm onPublished={() => setStep('done')} />
       </div>
     );
   }
@@ -76,15 +100,9 @@ export function PublishFlow() {
         </p>
       </div>
       <TypeSelector value={type} onChange={setType} />
-      {formal ? (
-        <Alert tone="info" role="status">
-          Las vacantes de empleo formal se publican con su propio formulario, que estará disponible
-          pronto.
-        </Alert>
-      ) : null}
       <div className="flex flex-col gap-2">
         <Button
-          aria-disabled={!type || formal}
+          aria-disabled={!type}
           aria-describedby={!type ? 'publicar-ayuda' : undefined}
           onClick={() => setStep('form')}
         >

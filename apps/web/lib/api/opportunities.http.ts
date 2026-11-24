@@ -13,6 +13,25 @@ function warningsOf(error: ApiError): LaborWarning[] {
 }
 
 export const opportunitiesApi: OpportunitiesApi = {
+  async publishFormal(input) {
+    try {
+      const { id } = await authenticated<{ id: string }>(
+        '/opportunities',
+        postJson({ ...input, type: 'FORMAL_JOB' }),
+      );
+      return { status: 'published', id };
+    } catch (error) {
+      if (error instanceof ApiError) {
+        if (error.problem.code === 'PUBLISHER_PROFILE_REQUIRED')
+          return { status: 'no_publisher_profile' };
+        if (error.problem.code === 'EMAIL_NOT_CONFIRMED') return { status: 'email_not_confirmed' };
+        if (error.status === 429) return { status: 'rate_limited', seconds: error.retryAfter };
+        if (error.status === 400 && error.problem.errors)
+          return { status: 'invalid', errors: error.problem.errors };
+      }
+      throw error;
+    }
+  },
   async list(query) {
     const params = new URLSearchParams();
     Object.entries(query).forEach(

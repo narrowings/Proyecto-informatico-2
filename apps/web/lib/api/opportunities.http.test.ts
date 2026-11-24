@@ -161,4 +161,36 @@ describe('opportunitiesApi', () => {
       retryAfter: 600,
     });
   });
+
+  it.each([
+    [201, { id: 'v1' }, { status: 'published', id: 'v1' }],
+    [403, { code: 'PUBLISHER_PROFILE_REQUIRED' }, { status: 'no_publisher_profile' }],
+    [403, { code: 'EMAIL_NOT_CONFIRMED' }, { status: 'email_not_confirmed' }],
+    [
+      400,
+      { errors: { closesAt: ['Futura'] } },
+      { status: 'invalid', errors: { closesAt: ['Futura'] } },
+    ],
+  ])('HU-024: publicar vacante formal responde %s como estado', async (status, body, expected) => {
+    const { opportunitiesApi } = await import('./opportunities.http');
+    fetchApi
+      .mockResolvedValueOnce(Response.json({ accessToken: 'jwt' }))
+      .mockResolvedValueOnce(Response.json(body, { status }));
+    const input = {
+      title: 'Auxiliar',
+      description: 'Descripción suficientemente larga.',
+      categoryId: 1,
+      zoneId: 2,
+      salaryMinCop: 1600000,
+      modality: 'ONSITE' as const,
+      schedule: 'FULL_TIME' as const,
+      experienceRequired: '6 meses',
+      requirements: 'Bachiller',
+      closesAt: '2099-01-01T00:00:00.000Z',
+    };
+    await expect(opportunitiesApi.publishFormal(input)).resolves.toEqual(expected);
+    expect(JSON.parse(String(fetchApi.mock.calls[1][1]?.body))).toMatchObject({
+      type: 'FORMAL_JOB',
+    });
+  });
 });

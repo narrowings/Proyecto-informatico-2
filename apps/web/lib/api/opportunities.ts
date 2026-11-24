@@ -47,6 +47,7 @@ export type OpportunitiesApi = {
   list(query: OpportunityQuery): Promise<OpportunityPage | { status: 'error' }>;
   get(id: string): Promise<OpportunityResult>;
   apply(id: string, message?: string): Promise<ApplicationResult>;
+  publishFormal(input: NewFormalOpportunity): Promise<FormalPublishResult>;
   applicationStatus(ids: string[]): Promise<Record<string, import('./activity').ApplicationStatus>>;
 };
 
@@ -78,7 +79,40 @@ export type Opportunity = {
   scheduledAt: string | null;
   closesAt: string | null;
   publisher: { id: string; displayName: string; photoUrl: string | null } | null;
+  /** Solo tareas: cupos, duración y condiciones. */
+  peopleNeeded?: number | null;
+  durationMinutes?: number | null;
+  conditions?: string | null;
+  /** Solo vacantes formales. */
+  experienceRequired?: string | null;
+  requirements?: string | null;
 };
+
+export type WorkModality = 'ONSITE' | 'REMOTE' | 'HYBRID';
+export type WorkSchedule = 'FULL_TIME' | 'PART_TIME' | 'SHIFTS' | 'FLEXIBLE';
+
+/** Vacante de empleo formal (HU-024). No lleva advertencia laboral: ya es empleo. */
+export type NewFormalOpportunity = {
+  title: string;
+  description: string;
+  categoryId: number;
+  zoneId: number;
+  salaryMinCop: number;
+  salaryMaxCop?: number;
+  modality: WorkModality;
+  schedule: WorkSchedule;
+  experienceRequired: string;
+  requirements: string;
+  /** ISO 8601 en UTC, en el futuro. */
+  closesAt: string;
+};
+
+export type FormalPublishResult =
+  | { status: 'published'; id: string }
+  | { status: 'no_publisher_profile' }
+  | { status: 'email_not_confirmed' }
+  | { status: 'rate_limited'; seconds: number }
+  | { status: 'invalid'; errors: Record<string, string[]> };
 export type OpportunityPage = {
   items: Opportunity[];
   total: number;
