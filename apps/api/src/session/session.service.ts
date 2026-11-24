@@ -153,7 +153,7 @@ export class SessionService {
   async me(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, email: true, status: true },
+      select: { id: true, name: true, email: true, status: true, role: true },
     });
     if (!user || user.status !== AccountStatus.ACTIVE) {
       throw new UnauthorizedException(SESSION_EXPIRED);
@@ -162,6 +162,9 @@ export class SessionService {
       id: user.id,
       name: user.name,
       email: user.email,
+      // HU-012: el frontend muestra el panel de administración solo si es true. La API lo vuelve
+      // a verificar en cada ruta /admin (AdminGuard): esto solo decide qué se muestra.
+      isAdmin: user.role === UserRole.ADMIN,
       ...(await this.profiles.getProfileSummary(user.id)),
     };
   }
