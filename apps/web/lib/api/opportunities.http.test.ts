@@ -28,6 +28,19 @@ afterEach(() => vi.unstubAllGlobals());
 const bodyOf = (call: number) => JSON.parse(String(fetchApi.mock.calls[call][1]?.body));
 
 describe('opportunitiesApi', () => {
+  it.each([
+    ['EMAIL_NOT_CONFIRMED', 'email_not_confirmed', 403],
+    ['WORKER_PROFILE_REQUIRED', 'no_worker_profile', 403],
+    ['OWN_OPPORTUNITY', 'own_opportunity', 400],
+    ['OPPORTUNITY_NOT_AVAILABLE', 'closed', 409],
+    ['ALREADY_APPLIED', 'already_applied', 409],
+  ] as const)('traduce %s por su código de negocio', async (code, status, httpStatus) => {
+    const { opportunitiesApi } = await import('./opportunities.http');
+    fetchApi
+      .mockResolvedValueOnce(json({ accessToken: 'jwt' }))
+      .mockResolvedValueOnce(json({ code }, httpStatus));
+    await expect(opportunitiesApi.apply('o')).resolves.toEqual({ status });
+  });
   it('lista, consulta detalle y estado de postulación', async () => {
     const { opportunitiesApi } = await import('./opportunities.http');
     fetchApi
@@ -46,8 +59,8 @@ describe('opportunitiesApi', () => {
     fetchApi
       .mockResolvedValueOnce(json({ accessToken: 'jwt' }))
       .mockResolvedValueOnce(json({ code: 'ALREADY_APPLIED' }, 409))
-      .mockResolvedValueOnce(json({ code: 'OPPORTUNITY_NOT_OPEN' }, 409))
-      .mockResolvedValueOnce(json({}, 403))
+      .mockResolvedValueOnce(json({ code: 'OPPORTUNITY_NOT_AVAILABLE' }, 409))
+      .mockResolvedValueOnce(json({ code: 'WORKER_PROFILE_REQUIRED' }, 403))
       .mockResolvedValueOnce(json({}, 404))
       .mockResolvedValueOnce(json({}, 429))
       .mockResolvedValueOnce(json({ errors: { message: ['Muy largo'] } }, 400));

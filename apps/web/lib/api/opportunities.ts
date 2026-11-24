@@ -89,5 +89,14 @@ export type OpportunityResult =
   { status: 'found'; opportunity: Opportunity } | { status: 'not_found' };
 export type ApplicationResult =
   | { status: 'applied' }
-  | { status: 'already_applied' | 'closed' | 'no_worker_profile' | 'not_found' | 'rate_limited' }
+  | {
+      status:
+        | 'already_applied'
+        | 'closed'
+        | 'no_worker_profile'
+        | 'not_found'
+        | 'rate_limited'
+        | 'email_not_confirmed'
+        | 'own_opportunity';
+    }
   | { status: 'invalid'; errors: Record<string, string[]> };
