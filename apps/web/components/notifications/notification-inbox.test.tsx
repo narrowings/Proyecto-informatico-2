@@ -1,14 +1,14 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, it, vi, expect } from 'vitest';
-import { notificationsApi, type InboxItem } from '@/lib/api';
-import { NotificationInbox } from './notification-inbox';
+import { notificationsApi, type NotificationItem } from '@/lib/api';
+import { NotificationsInbox } from './notifications-inbox';
 const push = vi.fn();
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
 afterEach(() => {
   vi.restoreAllMocks();
   push.mockClear();
 });
-const item: InboxItem = {
+const item: NotificationItem = {
   id: 'n',
   title: 'Tienes una selección',
   type: 'SELECTION_RECEIVED',
@@ -27,9 +27,9 @@ it('carga más, marca todas y conserva la bandeja ante una ruta externa', async 
       pageSize: 1,
       unread: 2,
     });
-  const mark = vi.spyOn(notificationsApi, 'readAll').mockResolvedValue({ updated: 2 });
-  vi.spyOn(notificationsApi, 'read').mockResolvedValue({ id: 'n', link: '//example.test' });
-  render(<NotificationInbox />);
+  const mark = vi.spyOn(notificationsApi, 'markAllAsRead').mockResolvedValue({ updated: 2 });
+  vi.spyOn(notificationsApi, 'markAsRead').mockResolvedValue({ id: 'n', link: '//example.test' });
+  render(<NotificationsInbox />);
   fireEvent.click(await screen.findByRole('button', { name: 'Cargar más' }));
   expect(await screen.findByText('Trabajo completado')).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: /Tienes una selección/ }));
@@ -39,10 +39,8 @@ it('carga más, marca todas y conserva la bandeja ante una ruta externa', async 
     ),
   );
   expect(push).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: 'Marcar todas como leídas' }));
-  await waitFor(() =>
-    expect(screen.getByRole('button', { name: 'Marcar todas como leídas' })).toBeDisabled(),
-  );
+  fireEvent.click(screen.getByRole('button', { name: 'Marcar todas' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Marcar todas' })).toBeDisabled());
   expect(mark).toHaveBeenCalledTimes(1);
 });
 it('conserva el aviso sin leer si falla la apertura y navega al enlace devuelto al reintentar', async () => {
@@ -53,10 +51,10 @@ it('conserva el aviso sin leer si falla la apertura y navega al enlace devuelto 
     pageSize: 20,
     unread: 1,
   });
-  vi.spyOn(notificationsApi, 'read')
+  vi.spyOn(notificationsApi, 'markAsRead')
     .mockRejectedValueOnce(new Error())
     .mockResolvedValue({ id: 'n', link: '/mi-actividad/selecciones/s' });
-  render(<NotificationInbox />);
+  render(<NotificationsInbox />);
   fireEvent.click(await screen.findByRole('button', { name: /Tienes una selección/ }));
   expect(await screen.findByRole('alert')).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: /Sin leer.*Tienes una selección/ }));

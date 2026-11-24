@@ -15,3 +15,5 @@ export { activityApi } from './activity.http';
 export type * from './activity';
 export { notificationsApi } from './notifications.http';
 export type * from './notifications';
+export { reportsApi } from './reports.http';
+export type * from './reports';

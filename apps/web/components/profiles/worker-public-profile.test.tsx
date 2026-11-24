@@ -4,8 +4,10 @@ import type { PublicWorkerProfile, Reputation } from '@/lib/api';
 import { WorkerPublicProfile } from './worker-public-profile';
 
 const getPublicWorkerProfile = vi.fn();
+const getCurrentUser = vi.fn();
 vi.mock('@/lib/api', () => ({
   profilesApi: { getPublicWorkerProfile: (...args: unknown[]) => getPublicWorkerProfile(...args) },
+  sessionApi: { getCurrentUser: () => getCurrentUser() },
 }));
 
 const newcomer: Reputation = {
@@ -45,7 +47,10 @@ const profile = (overrides: Partial<PublicWorkerProfile> = {}): PublicWorkerProf
   ...overrides,
 });
 
-beforeEach(() => getPublicWorkerProfile.mockReset());
+beforeEach(() => {
+  getPublicWorkerProfile.mockReset();
+  getCurrentUser.mockReset().mockResolvedValue(null);
+});
 
 describe('WorkerPublicProfile', () => {
   it('muestra foto, nombre, disponibilidad, habilidades, experiencia y zona aproximada (HU-029 CA1)', async () => {

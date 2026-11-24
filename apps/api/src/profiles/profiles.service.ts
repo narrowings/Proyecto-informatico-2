@@ -144,6 +144,8 @@ export class ProfilesService {
       hasWorkerProfile: Boolean(worker),
       hasPublisherProfile: Boolean(publisher),
       publisherProfileId: publisher?.id,
+      // HU-019: el frontend no ofrece "Reportar" en el propio perfil.
+      workerProfileId: worker?.id,
     };
   }
 

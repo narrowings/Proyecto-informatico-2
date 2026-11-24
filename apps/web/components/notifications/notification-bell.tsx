@@ -9,7 +9,7 @@ import { ApiError } from '@/lib/api/http';
 import { ROUTES } from '@/lib/routes';
 import { useCurrentUser } from '@/lib/session/use-current-user';
 
-export const inboxChanged = 'red:notifications-read';
+export const inboxChanged = 'red:notifications';
 
 export function NotificationBell() {
   const path = usePathname();
@@ -34,7 +34,7 @@ function UnreadBell() {
         return;
       }
       notificationsApi
-        .count()
+        .unreadCount()
         .then(
           ({ unread }) => {
             if (version === current) setCount(unread);

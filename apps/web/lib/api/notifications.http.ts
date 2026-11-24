@@ -1,13 +1,19 @@
-import { authenticated } from './http';
-import type { InboxPage } from './notifications';
+import { z } from 'zod';
+import { authenticated, postJson } from './http';
+import type { NotificationsApi } from './notifications';
 
-export const notificationsApi = {
-  list: (page: number) => authenticated<InboxPage>(`/notifications?page=${page}&pageSize=20`),
-  count: () => authenticated<{ unread: number }>('/notifications/unread-count'),
-  read: (id: string) =>
-    authenticated<{ id: string; link: string | null }>(
-      '/notifications/' + encodeURIComponent(id) + '/read',
-      { method: 'POST' },
-    ),
-  readAll: () => authenticated<{ updated: number }>('/notifications/read-all', { method: 'POST' }),
+export const notificationsApi: NotificationsApi = {
+  list(page, pageSize = 20) {
+    return authenticated(`/notifications?page=${page}&pageSize=${pageSize}`);
+  },
+  unreadCount() {
+    return authenticated('/notifications/unread-count');
+  },
+  markAsRead(id) {
+    if (!z.uuid().safeParse(id).success) return Promise.reject(new Error('Identificador inválido'));
+    return authenticated(`/notifications/${encodeURIComponent(id)}/read`, postJson({}));
+  },
+  markAllAsRead() {
+    return authenticated('/notifications/read-all', postJson({}));
+  },
 };

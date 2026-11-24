@@ -10,7 +10,7 @@ afterEach(() => {
 });
 it('no consulta las notificaciones cuando falta sesión', () => {
   vi.spyOn(session, 'useCurrentUser').mockReturnValue({ status: 'ready', user: null });
-  const count = vi.spyOn(notificationsApi, 'count');
+  const count = vi.spyOn(notificationsApi, 'unreadCount');
   render(<NotificationBell />);
   expect(count).not.toHaveBeenCalled();
   expect(screen.queryByRole('link')).toBeNull();
@@ -22,7 +22,7 @@ it('cuenta solo con la pestaña visible y actualiza la campana al leer', async (
     user: { id: 'u', name: 'Ana', hasWorkerProfile: true, hasPublisherProfile: false },
   });
   const visible = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
-  const count = vi.spyOn(notificationsApi, 'count').mockResolvedValue({ unread: 12 });
+  const count = vi.spyOn(notificationsApi, 'unreadCount').mockResolvedValue({ unread: 12 });
   render(<NotificationBell />);
   await act(() => Promise.resolve());
   expect(screen.getByRole('link', { name: 'Notificaciones, 12 sin leer' })).toHaveTextContent('9+');

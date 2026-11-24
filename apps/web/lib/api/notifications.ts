@@ -1,5 +1,4 @@
-import type { Page } from './ratings';
-export type InboxItem = {
+export type NotificationItem = {
   id: string;
   type: string;
   title: string;
@@ -8,4 +7,18 @@ export type InboxItem = {
   read: boolean;
   createdAt: string;
 };
-export type InboxPage = Page<InboxItem> & { unread: number };
+
+export type NotificationsPage = {
+  items: NotificationItem[];
+  total: number;
+  unread: number;
+  page: number;
+  pageSize: number;
+};
+
+export type NotificationsApi = {
+  list(page: number, pageSize?: number): Promise<NotificationsPage>;
+  unreadCount(): Promise<{ unread: number }>;
+  markAsRead(id: string): Promise<{ id: string; link: string | null }>;
+  markAllAsRead(): Promise<{ updated: number }>;
+};

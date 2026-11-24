@@ -7,10 +7,10 @@ it('consulta y marca notificaciones con el token de la sesión', async () => {
     .mockResolvedValueOnce(Response.json({ accessToken: 'token' }))
     .mockImplementation(async () => Response.json({}));
   vi.stubGlobal('fetch', mocked);
-  await notificationsApi.count();
+  await notificationsApi.unreadCount();
   await notificationsApi.list(2);
-  await notificationsApi.read('abc');
-  await notificationsApi.readAll();
+  await notificationsApi.markAsRead('6f1c1f5e-3a1b-4b5e-9d0e-1c2b3a4d5e6f');
+  await notificationsApi.markAllAsRead();
   expect(
     mocked.mock.calls
       .slice(1)
@@ -22,7 +22,7 @@ it('consulta y marca notificaciones con el token de la sesión', async () => {
   ).toEqual([
     ['/v1/notifications/unread-count', 'GET', 'Bearer token'],
     ['/v1/notifications?page=2&pageSize=20', 'GET', 'Bearer token'],
-    ['/v1/notifications/abc/read', 'POST', 'Bearer token'],
+    ['/v1/notifications/6f1c1f5e-3a1b-4b5e-9d0e-1c2b3a4d5e6f/read', 'POST', 'Bearer token'],
     ['/v1/notifications/read-all', 'POST', 'Bearer token'],
   ]);
   mocked.mockResolvedValueOnce(
